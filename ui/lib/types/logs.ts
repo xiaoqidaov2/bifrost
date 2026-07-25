@@ -818,7 +818,7 @@ export interface ProviderThroughputHistogramResponse {
 	providers: string[];
 }
 
-/** Grouping dimension for /logs/histogram/*/by-dimension endpoints */
+// Grouping dimension for /logs/histogram/{metric}/by-dimension endpoints
 export type HistogramDimension = "provider" | "team_id" | "customer_id" | "user_id" | "business_unit_id";
 
 export interface DimensionCostHistogramBucket {
