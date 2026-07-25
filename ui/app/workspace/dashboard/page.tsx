@@ -15,6 +15,7 @@ import { type ChartType } from "./components/charts/chartTypeToggle";
 import { ModelFilterSelect } from "./components/charts/modelFilterSelect";
 import { ExportPopover } from "./components/exportPopover";
 import { type DimensionRankingsTabViewHandle, DimensionRankingsTabView } from "./components/tabViews/dimensionRankingsTabView";
+import { type DimensionUsageTabViewHandle, DimensionUsageTabView } from "./components/tabViews/dimensionUsageTabView";
 import { type MCPTabViewHandle, MCPTabView } from "./components/tabViews/mcpTabView";
 import { type ModelRankingsTabViewHandle, ModelRankingsTabView } from "./components/tabViews/modelRankingsTabView";
 import { type OverviewTabViewHandle, OverviewTabView } from "./components/tabViews/overviewTabView";
@@ -68,6 +69,14 @@ export default function DashboardPage() {
 			provider_token_provider: parseAsString.withDefault("all"),
 			provider_latency_provider: parseAsString.withDefault("all"),
 			provider_throughput_provider: parseAsString.withDefault("all"),
+			// Dimension histograms tab (cost/tokens/latency by-dimension)
+			histogram_dimension: parseAsString.withDefault("provider"),
+			dim_cost_chart: parseAsString.withDefault("bar"),
+			dim_token_chart: parseAsString.withDefault("bar"),
+			dim_latency_chart: parseAsString.withDefault("bar"),
+			dim_cost_value: parseAsString.withDefault("all"),
+			dim_token_value: parseAsString.withDefault("all"),
+			dim_latency_value: parseAsString.withDefault("all"),
 			mcp_volume_chart: parseAsString.withDefault("bar"),
 			mcp_cost_chart: parseAsString.withDefault("bar"),
 			mcp_tool_names: parseAsString.withDefault(""),
@@ -195,6 +204,7 @@ export default function DashboardPage() {
 	// Tab view refs for export data aggregation
 	const overviewRef = useRef<OverviewTabViewHandle>(null);
 	const providerRef = useRef<ProviderUsageTabViewHandle>(null);
+	const dimensionRef = useRef<DimensionUsageTabViewHandle>(null);
 	const mcpRef = useRef<MCPTabViewHandle>(null);
 	const modelRankingsRef = useRef<ModelRankingsTabViewHandle>(null);
 	const teamRankingsRef = useRef<DimensionRankingsTabViewHandle>(null);
@@ -206,6 +216,7 @@ export default function DashboardPage() {
 	const allRefs = [
 		overviewRef,
 		providerRef,
+		dimensionRef,
 		mcpRef,
 		modelRankingsRef,
 		teamRankingsRef,
@@ -265,6 +276,13 @@ export default function DashboardPage() {
 	const handleProviderTokenChartToggle = useCallback((type: ChartType) => setUrlState({ provider_token_chart: type }), [setUrlState]);
 	const handleProviderLatencyChartToggle = useCallback((type: ChartType) => setUrlState({ provider_latency_chart: type }), [setUrlState]);
 	const handleProviderThroughputChartToggle = useCallback((type: ChartType) => setUrlState({ provider_throughput_chart: type }), [setUrlState]);
+	const handleDimCostChartToggle = useCallback((type: ChartType) => setUrlState({ dim_cost_chart: type }), [setUrlState]);
+	const handleDimTokenChartToggle = useCallback((type: ChartType) => setUrlState({ dim_token_chart: type }), [setUrlState]);
+	const handleDimLatencyChartToggle = useCallback((type: ChartType) => setUrlState({ dim_latency_chart: type }), [setUrlState]);
+	const handleHistogramDimensionChange = useCallback((dimension: string) => setUrlState({ histogram_dimension: dimension }), [setUrlState]);
+	const handleDimCostValueChange = useCallback((value: string) => setUrlState({ dim_cost_value: value }), [setUrlState]);
+	const handleDimTokenValueChange = useCallback((value: string) => setUrlState({ dim_token_value: value }), [setUrlState]);
+	const handleDimLatencyValueChange = useCallback((value: string) => setUrlState({ dim_latency_value: value }), [setUrlState]);
 	const handleMcpVolumeChartToggle = useCallback((type: ChartType) => setUrlState({ mcp_volume_chart: type }), [setUrlState]);
 	const handleMcpCostChartToggle = useCallback((type: ChartType) => setUrlState({ mcp_cost_chart: type }), [setUrlState]);
 
@@ -398,6 +416,7 @@ export default function DashboardPage() {
 		const ids = [
 			"dashboard-section-overview",
 			"dashboard-section-provider-usage",
+			"dashboard-section-dimensions",
 			"dashboard-section-rankings",
 			"dashboard-section-mcp",
 			"dashboard-section-team-rankings",
@@ -505,6 +524,9 @@ export default function DashboardPage() {
 								<TabsTrigger className="shrink-0" value="provider-usage" data-testid="dashboard-tab-provider-usage">
 									Provider Usage
 								</TabsTrigger>
+								<TabsTrigger className="shrink-0" value="dimensions" data-testid="dashboard-tab-dimensions">
+									Dimensions
+								</TabsTrigger>
 								<TabsTrigger className="shrink-0" value="rankings" data-testid="dashboard-tab-rankings">
 									Model Rankings
 								</TabsTrigger>
@@ -583,6 +605,33 @@ export default function DashboardPage() {
 									onProviderTokenProviderChange={handleProviderTokenProviderChange}
 									onProviderLatencyProviderChange={handleProviderLatencyProviderChange}
 									onProviderThroughputProviderChange={handleProviderThroughputProviderChange}
+								/>
+							</div>
+						</TabsContent>
+
+						{/* Dimension histograms Tab */}
+						<TabsContent value="dimensions" {...(pdfMode && { forceMount: true })}>
+							<div id="dashboard-section-dimensions">
+								<DimensionUsageTabView
+									ref={dimensionRef}
+									filters={filters}
+									active={activeTab === "dimensions" || pdfMode}
+									startTime={urlState.start_time}
+									endTime={urlState.end_time}
+									dimension={urlState.histogram_dimension}
+									costChartType={toChartType(urlState.dim_cost_chart)}
+									tokenChartType={toChartType(urlState.dim_token_chart)}
+									latencyChartType={toChartType(urlState.dim_latency_chart)}
+									costValue={urlState.dim_cost_value}
+									tokenValue={urlState.dim_token_value}
+									latencyValue={urlState.dim_latency_value}
+									onDimensionChange={handleHistogramDimensionChange}
+									onCostChartToggle={handleDimCostChartToggle}
+									onTokenChartToggle={handleDimTokenChartToggle}
+									onLatencyChartToggle={handleDimLatencyChartToggle}
+									onCostValueChange={handleDimCostValueChange}
+									onTokenValueChange={handleDimTokenValueChange}
+									onLatencyValueChange={handleDimLatencyValueChange}
 								/>
 							</div>
 						</TabsContent>

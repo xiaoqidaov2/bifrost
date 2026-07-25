@@ -818,6 +818,60 @@ export interface ProviderThroughputHistogramResponse {
 	providers: string[];
 }
 
+/** Grouping dimension for /logs/histogram/*/by-dimension endpoints */
+export type HistogramDimension = "provider" | "team_id" | "customer_id" | "user_id" | "business_unit_id";
+
+export interface DimensionCostHistogramBucket {
+	timestamp: string;
+	total_cost: number;
+	by_dimension: Record<string, number>;
+}
+
+export interface DimensionCostHistogramResponse {
+	buckets: DimensionCostHistogramBucket[];
+	bucket_size_seconds: number;
+	dimension: HistogramDimension | string;
+	dimension_values: string[];
+}
+
+export interface DimensionTokenStats {
+	prompt_tokens: number;
+	completion_tokens: number;
+	total_tokens: number;
+}
+
+export interface DimensionTokenHistogramBucket {
+	timestamp: string;
+	by_dimension: Record<string, DimensionTokenStats>;
+}
+
+export interface DimensionTokenHistogramResponse {
+	buckets: DimensionTokenHistogramBucket[];
+	bucket_size_seconds: number;
+	dimension: HistogramDimension | string;
+	dimension_values: string[];
+}
+
+export interface DimensionLatencyStats {
+	avg_latency: number;
+	p90_latency: number;
+	p95_latency: number;
+	p99_latency: number;
+	total_requests: number;
+}
+
+export interface DimensionLatencyHistogramBucket {
+	timestamp: string;
+	by_dimension: Record<string, DimensionLatencyStats>;
+}
+
+export interface DimensionLatencyHistogramResponse {
+	buckets: DimensionLatencyHistogramBucket[];
+	bucket_size_seconds: number;
+	dimension: HistogramDimension | string;
+	dimension_values: string[];
+}
+
 export interface LogsResponse {
 	logs: LogEntry[];
 	pagination: Pagination;

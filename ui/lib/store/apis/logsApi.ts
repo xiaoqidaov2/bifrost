@@ -1,7 +1,10 @@
 import { RedactedDBKey, VirtualKey } from "@/lib/types/governance";
 import {
 	CostHistogramResponse,
+	DimensionCostHistogramResponse,
+	DimensionLatencyHistogramResponse,
 	DimensionRankingsResponse,
+	DimensionTokenHistogramResponse,
 	LatencyHistogramResponse,
 	LogEntry,
 	LogFilters,
@@ -305,6 +308,51 @@ export const logsApi = baseApi.injectEndpoints({
 			providesTags: ["Logs"],
 		}),
 
+		// Dimension-grouped cost histogram (provider/team/customer/user/business_unit)
+		getLogsDimensionCostHistogram: builder.query<
+			DimensionCostHistogramResponse,
+			{
+				filters: LogFilters;
+				dimension: string;
+			}
+		>({
+			query: ({ filters, dimension }) => ({
+				url: "/logs/histogram/cost/by-dimension",
+				params: { ...buildFilterParams(filters), dimension },
+			}),
+			providesTags: ["Logs"],
+		}),
+
+		// Dimension-grouped token histogram
+		getLogsDimensionTokenHistogram: builder.query<
+			DimensionTokenHistogramResponse,
+			{
+				filters: LogFilters;
+				dimension: string;
+			}
+		>({
+			query: ({ filters, dimension }) => ({
+				url: "/logs/histogram/tokens/by-dimension",
+				params: { ...buildFilterParams(filters), dimension },
+			}),
+			providesTags: ["Logs"],
+		}),
+
+		// Dimension-grouped latency histogram
+		getLogsDimensionLatencyHistogram: builder.query<
+			DimensionLatencyHistogramResponse,
+			{
+				filters: LogFilters;
+				dimension: string;
+			}
+		>({
+			query: ({ filters, dimension }) => ({
+				url: "/logs/histogram/latency/by-dimension",
+				params: { ...buildFilterParams(filters), dimension },
+			}),
+			providesTags: ["Logs"],
+		}),
+
 		// Get model rankings with trends
 		getModelRankings: builder.query<
 			ModelRankingsResponse,
@@ -425,6 +473,9 @@ export const {
 	useGetLogsProviderLatencyHistogramQuery,
 	useGetLogsThroughputHistogramQuery,
 	useGetLogsProviderThroughputHistogramQuery,
+	useGetLogsDimensionCostHistogramQuery,
+	useGetLogsDimensionTokenHistogramQuery,
+	useGetLogsDimensionLatencyHistogramQuery,
 	useGetLogSessionSummaryByIdQuery,
 	useGetDroppedRequestsQuery,
 	useGetAvailableFilterDataQuery,
@@ -441,6 +492,9 @@ export const {
 	useLazyGetLogsProviderLatencyHistogramQuery,
 	useLazyGetLogsThroughputHistogramQuery,
 	useLazyGetLogsProviderThroughputHistogramQuery,
+	useLazyGetLogsDimensionCostHistogramQuery,
+	useLazyGetLogsDimensionTokenHistogramQuery,
+	useLazyGetLogsDimensionLatencyHistogramQuery,
 	useGetModelRankingsQuery,
 	useGetDimensionRankingsQuery,
 	useLazyGetModelRankingsQuery,
