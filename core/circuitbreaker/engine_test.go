@@ -1,0 +1,175 @@
+package circuitbreaker
+
+import (
+	"testing"
+	"time"
+
+	"github.com/maximhq/bifrost/core/schemas"
+)
+
+func TestEngine_TripsAfterThresholdAndReroutes(t *testing.T) {
+	e := NewEngine(nil)
+	fixed := time.Date(2026, 7, 26, 12, 0, 0, 0, time.UTC)
+	e.now = func() time.Time { return fixed }
+
+	if err := e.SetPolicies([]Policy{{
+		Name:             "main",
+		Enabled:          true,
+		PrimaryProvider:  "openai",
+		PrimaryModel:     "gpt-4o",
+		FallbackProvider: "openai",
+		FallbackModel:    "gpt-4o-mini",
+		DefaultCooldown:  30 * time.Second,
+		FailureThreshold: 3,
+		FailureWindow:    time.Minute,
+	}}); err != nil {
+		t.Fatal(err)
+	}
+
+	req := &schemas.BifrostRequest{
+		RequestType: schemas.ChatCompletionRequest,
+		ChatRequest: &schemas.BifrostChatRequest{
+			Provider: schemas.OpenAI,
+			Model:    "gpt-4o",
+		},
+	}
+	ctx := schemas.NewBifrostContext(nil, schemas.NoDeadline)
+	ctx.SetValue(schemas.BifrostContextKeyFallbackIndex, 0)
+
+	status := 503
+	fail := &schemas.BifrostError{
+		StatusCode: &status,
+		Error:      &schemas.ErrorField{Message: "service unavailable"},
+	}
+
+	for i := 0; i < 2; i++ {
+		e.ObserveAttempt(ctx, req, nil, fail)
+	}
+	// Not open yet
+	e.ApplyIfOpen(ctx, req)
+	p, m, _ := req.GetRequestFields()
+	if string(p) != "openai" || m != "gpt-4o" {
+		t.Fatalf("should not reroute before threshold, got %s/%s", p, m)
+	}
+
+	e.ObserveAttempt(ctx, req, nil, fail)
+	// Now open
+	e.ApplyIfOpen(ctx, req)
+	p, m, _ = req.GetRequestFields()
+	if string(p) != "openai" || m != "gpt-4o-mini" {
+		t.Fatalf("expected fallback rewrite, got %s/%s", p, m)
+	}
+	if rerouted, _ := ctx.Value(ContextKeyRerouted).(bool); !rerouted {
+		t.Fatal("expected rerouted context flag")
+	}
+
+	// Fallback success must not close
+	e.ObserveAttempt(ctx, req, &schemas.BifrostResponse{}, nil)
+	states := e.SnapshotState()
+	if len(states) != 1 || states[0].State != StateOpen {
+		t.Fatalf("expected still open after fallback success, got %+v", states)
+	}
+}
+
+func TestEngine_FourXXDoesNotTrip(t *testing.T) {
+	e := NewEngine(nil)
+	_ = e.SetPolicies([]Policy{{
+		Name:             "main",
+		Enabled:          true,
+		PrimaryProvider:  "openai",
+		PrimaryModel:     "gpt-4o",
+		FallbackProvider: "openai",
+		FallbackModel:    "mini",
+		FailureThreshold: 1,
+		FailureWindow:    time.Minute,
+		DefaultCooldown:  time.Minute,
+	}})
+	req := &schemas.BifrostRequest{
+		RequestType: schemas.ChatCompletionRequest,
+		ChatRequest: &schemas.BifrostChatRequest{Provider: schemas.OpenAI, Model: "gpt-4o"},
+	}
+	ctx := schemas.NewBifrostContext(nil, schemas.NoDeadline)
+	ctx.SetValue(schemas.BifrostContextKeyFallbackIndex, 0)
+	code := 400
+	e.ObserveAttempt(ctx, req, nil, &schemas.BifrostError{
+		StatusCode: &code,
+		Error:      &schemas.ErrorField{Message: "bad request"},
+	})
+	st := e.SnapshotState()
+	if st[0].State != StateClosed {
+		t.Fatalf("4xx should not open, got %s", st[0].State)
+	}
+}
+
+func TestEngine_CooldownExpiryCloses(t *testing.T) {
+	e := NewEngine(nil)
+	start := time.Date(2026, 7, 26, 12, 0, 0, 0, time.UTC)
+	now := start
+	e.now = func() time.Time { return now }
+
+	_ = e.SetPolicies([]Policy{{
+		Name:             "main",
+		Enabled:          true,
+		PrimaryProvider:  "openai",
+		PrimaryModel:     "gpt-4o",
+		FallbackProvider: "openai",
+		FallbackModel:    "mini",
+		FailureThreshold: 1,
+		FailureWindow:    time.Minute,
+		DefaultCooldown:  10 * time.Second,
+	}})
+	req := &schemas.BifrostRequest{
+		RequestType: schemas.ChatCompletionRequest,
+		ChatRequest: &schemas.BifrostChatRequest{Provider: schemas.OpenAI, Model: "gpt-4o"},
+	}
+	ctx := schemas.NewBifrostContext(nil, schemas.NoDeadline)
+	ctx.SetValue(schemas.BifrostContextKeyFallbackIndex, 0)
+	code := 500
+	e.ObserveAttempt(ctx, req, nil, &schemas.BifrostError{StatusCode: &code, Error: &schemas.ErrorField{Message: "boom"}})
+
+	now = start.Add(11 * time.Second)
+	st := e.SnapshotState()
+	if st[0].State != StateClosed {
+		t.Fatalf("expected closed after cooldown, got %s", st[0].State)
+	}
+}
+
+func TestEngine_Reset(t *testing.T) {
+	e := NewEngine(nil)
+	_ = e.SetPolicies([]Policy{{
+		Name: "main", Enabled: true,
+		PrimaryProvider: "openai", PrimaryModel: "gpt-4o",
+		FallbackProvider: "openai", FallbackModel: "mini",
+		FailureThreshold: 1, FailureWindow: time.Minute, DefaultCooldown: time.Hour,
+	}})
+	req := &schemas.BifrostRequest{
+		RequestType: schemas.ChatCompletionRequest,
+		ChatRequest: &schemas.BifrostChatRequest{Provider: schemas.OpenAI, Model: "gpt-4o"},
+	}
+	ctx := schemas.NewBifrostContext(nil, schemas.NoDeadline)
+	ctx.SetValue(schemas.BifrostContextKeyFallbackIndex, 0)
+	code := 502
+	e.ObserveAttempt(ctx, req, nil, &schemas.BifrostError{StatusCode: &code, Error: &schemas.ErrorField{Message: "bad gateway"}})
+	if err := e.Reset("main"); err != nil {
+		t.Fatal(err)
+	}
+	if e.SnapshotState()[0].State != StateClosed {
+		t.Fatal("reset should close")
+	}
+}
+
+func TestParseFileConfig(t *testing.T) {
+	en := true
+	pols, err := ParseFileConfig(&FileConfig{Policies: []FilePolicy{{
+		Name: "p1", Enabled: &en,
+		PrimaryProvider: "azure", PrimaryModel: "ptu",
+		FallbackProvider: "azure", FallbackModel: "paygo",
+		DefaultCooldown: "45s", FailureThreshold: 2, FailureWindow: "30s",
+	}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(pols) != 1 || pols[0].DefaultCooldown != 45*time.Second || pols[0].FailureWindow != 30*time.Second {
+		t.Fatalf("unexpected parse: %+v", pols)
+	}
+}

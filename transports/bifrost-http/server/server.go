@@ -17,6 +17,7 @@ import (
 
 	"github.com/fasthttp/router"
 	"github.com/google/uuid"
+	"github.com/maximhq/bifrost/core/circuitbreaker"
 	bifrost "github.com/maximhq/bifrost/core"
 	"github.com/maximhq/bifrost/core/schemas"
 	"github.com/maximhq/bifrost/framework/configstore"
@@ -183,6 +184,9 @@ type BifrostHTTPServer struct {
 	// access-profile-managed VKs). Optional; wired at server init when available,
 	// otherwise left nil so the quota endpoint reads the VK's own budget rows.
 	ExternalQuotaBudgetResolver handlers.ExternalQuotaBudgetResolver
+
+	// CircuitBreaker is the first-class sticky failover engine (circuit_breaker_config).
+	CircuitBreaker *circuitbreaker.Engine
 
 	SidekiqRunner         *sidekiq.Runner
 	SidekiqDispatcherStop func()
@@ -1557,6 +1561,10 @@ func (s *BifrostHTTPServer) RegisterAPIRoutes(ctx context.Context, callbacks Ser
 		skillsServingHandler.RegisterRoutes(s.Router, middlewares...)
 	}
 	cacheHandler.RegisterRoutes(s.Router, middlewares...)
+	cbHandler := handlers.NewCircuitBreakerHandler(func() *circuitbreaker.Engine {
+		return s.CircuitBreaker
+	})
+	cbHandler.RegisterRoutes(s.Router, middlewares...)
 	if featureFlagsHandler != nil {
 		featureFlagsHandler.RegisterRoutes(s.Router, middlewares...)
 	}
@@ -1851,6 +1859,19 @@ func (s *BifrostHTTPServer) Bootstrap(ctx context.Context) error {
 	// Sync plugin execution order from config to core (defensive — Init receives sorted list,
 	// but this ensures order consistency if the loading path changes in the future)
 	s.Client.ReorderPlugins(s.Config.GetPluginOrder())
+	// First-class circuit breaker (circuit_breaker_config) — core routing capability.
+	s.CircuitBreaker = circuitbreaker.NewEngine(logger)
+	if s.Config.CircuitBreakerConfig != nil {
+		pols, perr := circuitbreaker.ParseFileConfig(s.Config.CircuitBreakerConfig)
+		if perr != nil {
+			logger.Warn("circuit_breaker_config parse error: %v", perr)
+		} else if err := s.CircuitBreaker.SetPolicies(pols); err != nil {
+			logger.Warn("circuit_breaker_config load error: %v", err)
+		} else if len(pols) > 0 {
+			logger.Info("circuit breaker loaded %d polic(y/ies)", len(pols))
+		}
+	}
+	s.Client.SetCircuitBreaker(s.CircuitBreaker)
 	// Seed the catalog: push the initial keyconfig snapshot and fetch per-key
 	// live models for every provider concurrently.
 	logger.Info("listing all models and adding to model catalog")

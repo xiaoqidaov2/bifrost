@@ -1,5 +1,7 @@
 import { configureStore } from "@reduxjs/toolkit";
 import { baseApi } from "./apis/baseApi";
+// Side-effect: inject RTK endpoints into baseApi
+import "./apis/circuitBreakerApi";
 import { appReducer, pluginReducer, providerReducer } from "./slices";
 import { reducers as enterpriseReducers, type EnterpriseState } from "@enterprise/lib/store/slices";
 // Importing enterprise APIs triggers their self-injection into baseApi

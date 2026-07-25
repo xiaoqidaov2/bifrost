@@ -17,6 +17,7 @@ import (
 	"github.com/bytedance/sonic"
 	"github.com/google/uuid"
 
+	"github.com/maximhq/bifrost/core/circuitbreaker"
 	"github.com/maximhq/bifrost/core/keyselectors"
 	"github.com/maximhq/bifrost/core/mcp"
 	"github.com/maximhq/bifrost/core/mcp/codemode/starlark"
@@ -95,6 +96,10 @@ type Bifrost struct {
 	keySelector         schemas.KeySelector                 // Custom key selector function
 	keyPoolFilter       schemas.KeyPoolFilter               // optional hook to veto keys before selection (nil = all eligible)
 	kvStore             schemas.KVStore                     // optional KV store for session stickiness (nil = disabled)
+	// circuitBreaker is the first-class sticky failover engine (circuit_breaker_config).
+	// Applied after PreRequestHooks so governance/routing already selected a primary.
+	// nil means disabled / no policies.
+	circuitBreaker atomic.Pointer[circuitbreaker.Engine]
 }
 
 // ProviderQueue wraps a provider's request channel with lifecycle management
@@ -383,6 +388,17 @@ func (bifrost *Bifrost) SetTracer(tracer schemas.Tracer) {
 		tracer = schemas.DefaultTracer()
 	}
 	bifrost.tracer.Store(&tracerWrapper{tracer: tracer})
+}
+
+// SetCircuitBreaker attaches or replaces the first-class circuit breaker engine.
+// Pass nil to disable. Safe to call after Init (e.g. from HTTP server startup).
+func (bifrost *Bifrost) SetCircuitBreaker(engine *circuitbreaker.Engine) {
+	bifrost.circuitBreaker.Store(engine)
+}
+
+// GetCircuitBreaker returns the current circuit breaker engine, or nil.
+func (bifrost *Bifrost) GetCircuitBreaker() *circuitbreaker.Engine {
+	return bifrost.circuitBreaker.Load()
 }
 
 // getTracer returns the tracer from atomic storage with type assertion.
@@ -5040,9 +5056,19 @@ func (bifrost *Bifrost) handleRequest(ctx *schemas.BifrostContext, req *schemas.
 		return nil, err
 	}
 
+	// First-class circuit breaker: if primary is sticky-open, rewrite to fallback
+	// after plugins already selected the primary (governance/routing).
+	if cb := bifrost.circuitBreaker.Load(); cb != nil {
+		cb.ApplyIfOpen(ctx, req)
+		provider, model, fallbacks = req.GetRequestFields()
+	}
+
 	bifrost.logger.Debug(fmt.Sprintf("primary provider %s with model %s and %d fallbacks", provider, model, len(fallbacks)))
 
 	primaryResult, primaryErr := bifrost.tryRequest(ctx, req)
+	if cb := bifrost.circuitBreaker.Load(); cb != nil {
+		cb.ObserveAttempt(ctx, req, primaryResult, primaryErr)
+	}
 	if primaryErr != nil {
 		if primaryErr.Error != nil {
 			bifrost.logger.Debug(fmt.Sprintf("primary provider %s with model %s returned error: %s", provider, model, primaryErr.Error.Message))
@@ -5170,9 +5196,18 @@ func (bifrost *Bifrost) handleStreamRequest(ctx *schemas.BifrostContext, req *sc
 		return nil, err
 	}
 
+	if cb := bifrost.circuitBreaker.Load(); cb != nil {
+		cb.ApplyIfOpen(ctx, req)
+		provider, model, fallbacks = req.GetRequestFields()
+	}
+
 	bifrost.logger.Debug(fmt.Sprintf("primary provider %s with model %s and %d fallbacks", provider, model, len(fallbacks)))
 
 	primaryResult, primaryErr := bifrost.tryStreamRequest(ctx, req)
+	if cb := bifrost.circuitBreaker.Load(); cb != nil {
+		// Phase 1: observe immediate stream setup errors; successful stream start counts as success.
+		cb.ObserveAttempt(ctx, req, nil, primaryErr)
+	}
 	if primaryErr != nil {
 		if primaryErr.Error != nil {
 			bifrost.logger.Debug(fmt.Sprintf("primary provider %s with model %s returned error: %s", provider, model, primaryErr.Error.Message))

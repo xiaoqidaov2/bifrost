@@ -22,6 +22,7 @@ import (
 	"github.com/bytedance/sonic"
 	"github.com/google/uuid"
 	bifrost "github.com/maximhq/bifrost/core"
+	"github.com/maximhq/bifrost/core/circuitbreaker"
 	"github.com/maximhq/bifrost/core/mcp"
 	mcputils "github.com/maximhq/bifrost/core/mcp/utils"
 	"github.com/maximhq/bifrost/core/schemas"
@@ -172,12 +173,14 @@ type ConfigData struct {
 	MCP               *schemas.MCPConfig                    `json:"mcp,omitempty"`
 	Webhooks          []*WebhookEndpointConfig              `json:"webhooks,omitempty"`
 	Governance        *configstore.GovernanceConfig         `json:"governance,omitempty"`
-	VectorStoreConfig *vectorstore.Config                   `json:"vector_store,omitempty"`
-	ConfigStoreConfig *configstore.Config                   `json:"config_store,omitempty"`
-	LogsStoreConfig   *logstore.Config                      `json:"logs_store,omitempty"`
-	Plugins           []*schemas.PluginConfig               `json:"plugins,omitempty"`
-	WebSocket         *schemas.WebSocketConfig              `json:"websocket,omitempty"`
-	FeatureFlags      *FeatureFlagsFileConfig               `json:"feature_flags,omitempty"`
+	// CircuitBreakerConfig is first-class sticky failover (enterprise-shaped schema, OSS runtime).
+	CircuitBreakerConfig *circuitbreaker.FileConfig `json:"circuit_breaker_config,omitempty"`
+	VectorStoreConfig    *vectorstore.Config        `json:"vector_store,omitempty"`
+	ConfigStoreConfig    *configstore.Config        `json:"config_store,omitempty"`
+	LogsStoreConfig      *logstore.Config           `json:"logs_store,omitempty"`
+	Plugins              []*schemas.PluginConfig    `json:"plugins,omitempty"`
+	WebSocket            *schemas.WebSocketConfig   `json:"websocket,omitempty"`
+	FeatureFlags         *FeatureFlagsFileConfig    `json:"feature_flags,omitempty"`
 
 	presentSections           map[string]bool
 	presentGovernanceSections map[string]bool
@@ -417,25 +420,26 @@ func (cd *ConfigData) UnmarshalJSON(data []byte) error {
 
 	// First, unmarshal into a temporary struct to get all fields except the complex configs
 	type TempConfigData struct {
-		Version           int                                   `json:"version,omitempty"`
-		EnvLabel          string                                `json:"env_label,omitempty"`
-		SourceOfTruth     string                                `json:"source_of_truth,omitempty"`
-		FrameworkConfig   json.RawMessage                       `json:"framework,omitempty"`
-		Server            *ServerConfig                         `json:"server,omitempty"`
-		Client            *configstore.ClientConfig             `json:"client"`
-		EncryptionKey     *schemas.SecretVar                    `json:"encryption_key"`
-		AuthConfig        *configstore.AuthConfig               `json:"auth_config,omitempty"`
-		Providers         map[string]configstore.ProviderConfig `json:"providers"`
-		MCP               *schemas.MCPConfig                    `json:"mcp,omitempty"`
-		Webhooks          []*WebhookEndpointConfig              `json:"webhooks,omitempty"`
-		Governance        *configstore.GovernanceConfig         `json:"governance,omitempty"`
-		VectorStoreConfig json.RawMessage                       `json:"vector_store,omitempty"`
-		ConfigStoreConfig json.RawMessage                       `json:"config_store,omitempty"`
-		LogsStoreConfig   json.RawMessage                       `json:"logs_store,omitempty"`
-		Plugins           []*schemas.PluginConfig               `json:"plugins,omitempty"`
-		WebSocket         *schemas.WebSocketConfig              `json:"websocket,omitempty"`
-		FeatureFlags      *FeatureFlagsFileConfig               `json:"feature_flags,omitempty"`
-		SkillsRegistry    *SkillsRegistryConfig                 `json:"skills_registry,omitempty"`
+	Version              int                                   `json:"version,omitempty"`
+	EnvLabel             string                                `json:"env_label,omitempty"`
+	SourceOfTruth        string                                `json:"source_of_truth,omitempty"`
+	FrameworkConfig      json.RawMessage                       `json:"framework,omitempty"`
+	Server               *ServerConfig                         `json:"server,omitempty"`
+	Client               *configstore.ClientConfig             `json:"client"`
+	EncryptionKey        *schemas.SecretVar                    `json:"encryption_key"`
+	AuthConfig           *configstore.AuthConfig               `json:"auth_config,omitempty"`
+	Providers            map[string]configstore.ProviderConfig `json:"providers"`
+	MCP                  *schemas.MCPConfig                    `json:"mcp,omitempty"`
+	Webhooks             []*WebhookEndpointConfig              `json:"webhooks,omitempty"`
+	Governance           *configstore.GovernanceConfig         `json:"governance,omitempty"`
+	CircuitBreakerConfig *circuitbreaker.FileConfig            `json:"circuit_breaker_config,omitempty"`
+	VectorStoreConfig    json.RawMessage                       `json:"vector_store,omitempty"`
+	ConfigStoreConfig    json.RawMessage                       `json:"config_store,omitempty"`
+	LogsStoreConfig      json.RawMessage                       `json:"logs_store,omitempty"`
+	Plugins              []*schemas.PluginConfig               `json:"plugins,omitempty"`
+	WebSocket            *schemas.WebSocketConfig              `json:"websocket,omitempty"`
+	FeatureFlags         *FeatureFlagsFileConfig               `json:"feature_flags,omitempty"`
+	SkillsRegistry       *SkillsRegistryConfig                 `json:"skills_registry,omitempty"`
 	}
 
 	var temp TempConfigData
@@ -455,6 +459,7 @@ func (cd *ConfigData) UnmarshalJSON(data []byte) error {
 	cd.MCP = temp.MCP
 	cd.Webhooks = temp.Webhooks
 	cd.Governance = temp.Governance
+	cd.CircuitBreakerConfig = temp.CircuitBreakerConfig
 	cd.Plugins = temp.Plugins
 	cd.WebSocket = temp.WebSocket
 	cd.FeatureFlags = temp.FeatureFlags
@@ -626,6 +631,9 @@ type Config struct {
 	StreamingDecompressThreshold int64
 	// WebSocket configuration for WS gateway features (Responses WS mode, Realtime API).
 	WebSocketConfig *schemas.WebSocketConfig
+
+	// CircuitBreakerConfig is loaded from config.json circuit_breaker_config (first-class sticky failover).
+	CircuitBreakerConfig *circuitbreaker.FileConfig
 
 	// Precompiled header matcher for header filtering. Rebuilt on config change.
 	headerMatcher atomic.Pointer[HeaderMatcher]
@@ -983,6 +991,8 @@ func LoadConfig(ctx context.Context, configDirPath string) (*Config, error) {
 		wsConfig.CheckAndSetDefaults()
 		config.WebSocketConfig = wsConfig
 	}
+	// 15b. Circuit breaker (first-class sticky failover from circuit_breaker_config)
+	config.CircuitBreakerConfig = configData.CircuitBreakerConfig
 	// 16. Server config
 	if configData.Server != nil {
 		config.ServerConfig = configData.Server
