@@ -114,13 +114,22 @@ export const baseRoutingFields: CELFieldDefinition[] = [
 	},
 	{
 		name: "complexity_tier",
-		label: "Complexity Tier",
-		placeholder: "Select complexity tier",
+		label: "复杂度档位",
+		placeholder: "选择复杂度档位",
 		inputType: "select",
 		valueEditorType: "select",
 		operators: ["=", "!=", "in", "notIn"],
 		defaultOperator: "=",
-		values: COMPLEXITY_TIER_VALUES.map((tier) => ({ name: tier, label: tier.charAt(0) + tier.slice(1).toLowerCase() })),
+		values: COMPLEXITY_TIER_VALUES.map((tier) => ({
+			name: tier,
+			label: {
+				SIMPLE: "简单",
+				MEDIUM: "普通",
+				COMPLEX: "复杂",
+				REASONING: "深度思考",
+			}[tier],
+		})),
+		description: "按请求难易分档，给路由规则用。",
 	},
 	{
 		name: "params",

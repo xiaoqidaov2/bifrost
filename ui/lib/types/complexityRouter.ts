@@ -32,23 +32,23 @@ export const KEYWORD_LIST_DEFINITIONS: Array<{
 }> = [
 	{
 		key: "simple_keywords",
-		label: "Simple keywords",
-		description: "Phrases that bias the request toward the SIMPLE tier (greetings, trivia, small talk).",
+		label: "简单词",
+		description: "偏简单档：打招呼、闲聊、一眼能答的问题。",
 	},
 	{
 		key: "code_keywords",
-		label: "Code keywords",
-		description: "Signals that the request involves code, debugging, or programming artifacts.",
+		label: "代码词",
+		description: "有代码、调试、写程序的信号，分数会抬高。",
 	},
 	{
 		key: "technical_keywords",
-		label: "Technical keywords",
-		description: "Architecture, infra, and operational terms that raise the complexity score.",
+		label: "技术词",
+		description: "架构、运维、基础设施等词，分数会抬高。",
 	},
 	{
 		key: "reasoning_keywords",
-		label: "Reasoning keywords",
-		description: "Strong reasoning triggers. Matching these phrases can override tier selection toward the REASONING tier.",
+		label: "深度思考词",
+		description: "强推理触发词。命中后可能直接升到「深度思考」档。",
 	},
 ];
 
