@@ -359,7 +359,6 @@ export const zhCN: Record<string, string> = {
 	"Pick from your configured providers and models — no manual typing needed.":
 		"从已配置的提供商和模型中选择，无需手填。",
 	"Create circuit policy": "创建熔断策略",
-	"策略名称": "策略名称",,
 	"Sign in to your account to continue": "登录账户以继续",
 	"Enter your username": "请输入用户名",
 	"Enter your password": "请输入密码",
