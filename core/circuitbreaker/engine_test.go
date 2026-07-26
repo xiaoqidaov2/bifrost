@@ -173,3 +173,70 @@ func TestParseFileConfig(t *testing.T) {
 		t.Fatalf("unexpected parse: %+v", pols)
 	}
 }
+
+func TestEngine_MultiLevelFallbacksAndKeys(t *testing.T) {
+	e := NewEngine(nil)
+	fixed := time.Date(2026, 7, 26, 12, 0, 0, 0, time.UTC)
+	e.now = func() time.Time { return fixed }
+
+	if err := e.SetPolicies([]Policy{{
+		Name:            "keyed",
+		Enabled:         true,
+		PrimaryProvider: "openai",
+		PrimaryModel:    "gpt-4o",
+		PrimaryKeyIDs:   []string{"key-a", "key-b"},
+		Fallbacks: []FallbackHop{
+			{Provider: "openai", Model: "gpt-4o-mini", KeyID: "key-mini"},
+			{Provider: "anthropic", Model: "claude-sonnet-4"},
+		},
+		DefaultCooldown:  30 * time.Second,
+		FailureThreshold: 1,
+		FailureWindow:    time.Minute,
+	}}); err != nil {
+		t.Fatal(err)
+	}
+
+	// Only key-a open → not full sticky; peer pin path
+	req := &schemas.BifrostRequest{
+		RequestType: schemas.ChatCompletionRequest,
+		ChatRequest: &schemas.BifrostChatRequest{Provider: schemas.OpenAI, Model: "gpt-4o"},
+	}
+	ctx := schemas.NewBifrostContext(nil, schemas.NoDeadline)
+	ctx.SetValue(schemas.BifrostContextKeyFallbackIndex, 0)
+	ctx.SetValue(schemas.BifrostContextKeySelectedKeyID, "key-a")
+	code := 503
+	fail := &schemas.BifrostError{StatusCode: &code, Error: &schemas.ErrorField{Message: "down"}}
+	e.ObserveAttempt(ctx, req, nil, fail)
+
+	// key-b still closed → ApplyIfOpen should NOT rewrite model yet
+	e.ApplyIfOpen(ctx, req)
+	p, m, _ := req.GetRequestFields()
+	if string(p) != "openai" || m != "gpt-4o" {
+		t.Fatalf("expected stay on primary while peer healthy, got %s/%s", p, m)
+	}
+	e.ApplyPeerKeyPin(ctx, req)
+	if pin, _ := ctx.Value(schemas.BifrostContextKeyAPIKeyID).(string); pin != "key-b" {
+		t.Fatalf("expected peer pin key-b, got %q", pin)
+	}
+
+	// Open key-b too → full chain
+	ctx2 := schemas.NewBifrostContext(nil, schemas.NoDeadline)
+	ctx2.SetValue(schemas.BifrostContextKeyFallbackIndex, 0)
+	ctx2.SetValue(schemas.BifrostContextKeySelectedKeyID, "key-b")
+	e.ObserveAttempt(ctx2, req, nil, fail)
+
+	ctx3 := schemas.NewBifrostContext(nil, schemas.NoDeadline)
+	ctx3.SetValue(schemas.BifrostContextKeySelectedKeyID, "key-a")
+	req2 := &schemas.BifrostRequest{
+		RequestType: schemas.ChatCompletionRequest,
+		ChatRequest: &schemas.BifrostChatRequest{Provider: schemas.OpenAI, Model: "gpt-4o"},
+	}
+	e.ApplyIfOpen(ctx3, req2)
+	p, m, fbs := req2.GetRequestFields()
+	if string(p) != "openai" || m != "gpt-4o-mini" {
+		t.Fatalf("expected first hop mini, got %s/%s", p, m)
+	}
+	if len(fbs) != 1 || string(fbs[0].Provider) != "anthropic" || fbs[0].Model != "claude-sonnet-4" {
+		t.Fatalf("expected remaining hop anthropic, got %+v", fbs)
+	}
+}

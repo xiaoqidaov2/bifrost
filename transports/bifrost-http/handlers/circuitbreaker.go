@@ -47,17 +47,20 @@ func (h *CircuitBreakerHandler) engineOrError(ctx *fasthttp.RequestCtx) *circuit
 }
 
 type policyWire struct {
-	Name             string                     `json:"name"`
-	Enabled          *bool                      `json:"enabled,omitempty"`
-	PrimaryProvider  string                     `json:"primary_provider"`
-	PrimaryModel     string                     `json:"primary_model"`
-	FallbackProvider string                     `json:"fallback_provider"`
-	FallbackModel    string                     `json:"fallback_model"`
-	DefaultCooldown  string                     `json:"default_cooldown,omitempty"`
-	CooldownHeader   string                     `json:"cooldown_header,omitempty"`
-	FailureThreshold int                        `json:"failure_threshold,omitempty"`
-	FailureWindow    string                     `json:"failure_window,omitempty"`
-	Condition        *circuitbreaker.Condition  `json:"condition,omitempty"`
+	Name             string                    `json:"name"`
+	Enabled          *bool                     `json:"enabled,omitempty"`
+	PrimaryProvider  string                    `json:"primary_provider"`
+	PrimaryModel     string                    `json:"primary_model"`
+	PrimaryKeyIDs    []string                  `json:"primary_key_ids,omitempty"`
+	Fallbacks        []circuitbreaker.FallbackHop `json:"fallbacks,omitempty"`
+	FallbackProvider string                    `json:"fallback_provider,omitempty"`
+	FallbackModel    string                    `json:"fallback_model,omitempty"`
+	FallbackKeyID    string                    `json:"fallback_key_id,omitempty"`
+	DefaultCooldown  string                    `json:"default_cooldown,omitempty"`
+	CooldownHeader   string                    `json:"cooldown_header,omitempty"`
+	FailureThreshold int                       `json:"failure_threshold,omitempty"`
+	FailureWindow    string                    `json:"failure_window,omitempty"`
+	Condition        *circuitbreaker.Condition `json:"condition,omitempty"`
 }
 
 func policyToWire(p circuitbreaker.Policy) policyWire {
@@ -67,8 +70,11 @@ func policyToWire(p circuitbreaker.Policy) policyWire {
 		Enabled:          &en,
 		PrimaryProvider:  p.PrimaryProvider,
 		PrimaryModel:     p.PrimaryModel,
+		PrimaryKeyIDs:    p.PrimaryKeyIDs,
+		Fallbacks:        p.Fallbacks,
 		FallbackProvider: p.FallbackProvider,
 		FallbackModel:    p.FallbackModel,
+		FallbackKeyID:    p.FallbackKeyID,
 		DefaultCooldown:  p.DefaultCooldown.String(),
 		CooldownHeader:   p.CooldownHeader,
 		FailureThreshold: p.FailureThreshold,
@@ -82,8 +88,11 @@ func wireToPolicy(w policyWire) (circuitbreaker.Policy, error) {
 		Name:             w.Name,
 		PrimaryProvider:  w.PrimaryProvider,
 		PrimaryModel:     w.PrimaryModel,
+		PrimaryKeyIDs:    w.PrimaryKeyIDs,
+		Fallbacks:        w.Fallbacks,
 		FallbackProvider: w.FallbackProvider,
 		FallbackModel:    w.FallbackModel,
+		FallbackKeyID:    w.FallbackKeyID,
 		CooldownHeader:   w.CooldownHeader,
 		FailureThreshold: w.FailureThreshold,
 		Condition:        w.Condition,

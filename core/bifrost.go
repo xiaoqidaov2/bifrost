@@ -5056,9 +5056,11 @@ func (bifrost *Bifrost) handleRequest(ctx *schemas.BifrostContext, req *schemas.
 		return nil, err
 	}
 
-	// First-class circuit breaker: if primary is sticky-open, rewrite to fallback
-	// after plugins already selected the primary (governance/routing).
+	// First-class circuit breaker: if primary is sticky-open, rewrite to multi-level
+	// fallback chain after plugins already selected the primary (governance/routing).
+	// Peer-key pin keeps same model when only one listed key is open.
 	if cb := bifrost.circuitBreaker.Load(); cb != nil {
+		cb.ApplyPeerKeyPin(ctx, req)
 		cb.ApplyIfOpen(ctx, req)
 		provider, model, fallbacks = req.GetRequestFields()
 	}
@@ -5197,6 +5199,7 @@ func (bifrost *Bifrost) handleStreamRequest(ctx *schemas.BifrostContext, req *sc
 	}
 
 	if cb := bifrost.circuitBreaker.Load(); cb != nil {
+		cb.ApplyPeerKeyPin(ctx, req)
 		cb.ApplyIfOpen(ctx, req)
 		provider, model, fallbacks = req.GetRequestFields()
 	}

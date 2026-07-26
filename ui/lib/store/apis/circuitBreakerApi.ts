@@ -1,16 +1,36 @@
 import { baseApi } from "./baseApi";
 
+export interface CircuitBreakerFallbackHop {
+	provider: string;
+	model: string;
+	key_id?: string;
+}
+
 export interface CircuitBreakerPolicy {
 	name: string;
 	enabled?: boolean;
 	primary_provider: string;
 	primary_model: string;
-	fallback_provider: string;
-	fallback_model: string;
+	primary_key_ids?: string[];
+	fallbacks?: CircuitBreakerFallbackHop[];
+	/** @deprecated prefer fallbacks[] */
+	fallback_provider?: string;
+	/** @deprecated prefer fallbacks[] */
+	fallback_model?: string;
+	fallback_key_id?: string;
 	default_cooldown?: string;
 	cooldown_header?: string;
 	failure_threshold?: number;
 	failure_window?: string;
+}
+
+export interface CircuitBreakerKeyStateView {
+	key_id: string;
+	state: "closed" | "open" | string;
+	failure_count: number;
+	open_until?: string;
+	last_reason?: string;
+	last_changed_at?: string;
 }
 
 export interface CircuitBreakerStateView {
@@ -19,12 +39,15 @@ export interface CircuitBreakerStateView {
 	state: "closed" | "open" | string;
 	primary_provider: string;
 	primary_model: string;
-	fallback_provider: string;
-	fallback_model: string;
+	primary_key_ids?: string[];
+	fallbacks?: CircuitBreakerFallbackHop[];
+	fallback_provider?: string;
+	fallback_model?: string;
 	failure_count: number;
 	open_until?: string;
 	last_reason?: string;
 	last_changed_at?: string;
+	key_states?: CircuitBreakerKeyStateView[];
 }
 
 export const circuitBreakerApi = baseApi.injectEndpoints({

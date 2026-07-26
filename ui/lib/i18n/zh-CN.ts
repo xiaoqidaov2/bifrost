@@ -507,7 +507,12 @@ export const zhCN: Record<string, string> = {
 	"Else": "否则",
 	"When": "当",
 	"If": "如果",
-	"Signing in...": "登录中…"
+	"Signing in...": "登录中…",
+	"Add Fallback": "添加备用",
+	"Routing Targets": "路由目标",
+	"Add Target": "添加目标",
+	"Save Rule": "保存规则",
+	"Update Rule": "更新规则",
 };
 
 /** Longer phrases for runtime overlay (order: longer first when applied). */
