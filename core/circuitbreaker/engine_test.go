@@ -275,3 +275,51 @@ func TestEngine_MultiPrimaryModels(t *testing.T) {
 		t.Fatalf("expected rewrite for terra primary, got %s/%s", prov, model)
 	}
 }
+
+func TestEngine_MultiModelFallbackHop(t *testing.T) {
+	e := NewEngine(nil)
+	if err := e.SetPolicies([]Policy{{
+		Name:             "fb-multi",
+		Enabled:          true,
+		PrimaryProvider:  "catai",
+		PrimaryModels:    []string{"gpt-5.6-sol"},
+		Fallbacks: []FallbackHop{
+			{Provider: "catai", Models: []string{"gpt-5.6-sol", "gpt-5.6-terra"}, KeyID: "stable"},
+			{Provider: "catai", Models: []string{"gpt-5.6-sol"}, KeyID: "premium"},
+		},
+		DefaultCooldown:  30 * time.Second,
+		FailureThreshold: 1,
+		FailureWindow:    time.Minute,
+	}}); err != nil {
+		t.Fatal(err)
+	}
+	p, ok := e.GetPolicy("fb-multi")
+	if !ok {
+		t.Fatal("missing")
+	}
+	// Stored hop keeps multi models
+	if len(p.Fallbacks) != 2 || len(p.Fallbacks[0].Models) != 2 {
+		t.Fatalf("stored hops: %+v", p.Fallbacks)
+	}
+	flat := effectiveFallbacks(p)
+	if len(flat) != 3 || flat[0].Model != "gpt-5.6-sol" || flat[1].Model != "gpt-5.6-terra" || flat[2].KeyID != "premium" {
+		t.Fatalf("flat expand: %+v", flat)
+	}
+	// Trip and ensure first rewrite uses first expanded model
+	status := 503
+	fail := &schemas.BifrostError{StatusCode: &status, Error: &schemas.ErrorField{Message: "down"}}
+	req := &schemas.BifrostRequest{RequestType: schemas.ChatCompletionRequest, ChatRequest: &schemas.BifrostChatRequest{Provider: "catai", Model: "gpt-5.6-sol"}}
+	ctx := schemas.NewBifrostContext(nil, schemas.NoDeadline)
+	ctx.SetValue(schemas.BifrostContextKeyFallbackIndex, 0)
+	e.ObserveAttempt(ctx, req, nil, fail)
+	req2 := &schemas.BifrostRequest{RequestType: schemas.ChatCompletionRequest, ChatRequest: &schemas.BifrostChatRequest{Provider: "catai", Model: "gpt-5.6-sol"}}
+	ctx2 := schemas.NewBifrostContext(nil, schemas.NoDeadline)
+	e.ApplyIfOpen(ctx2, req2)
+	prov, model, fbs := req2.GetRequestFields()
+	if string(prov) != "catai" || model != "gpt-5.6-sol" {
+		t.Fatalf("first hop %s/%s", prov, model)
+	}
+	if len(fbs) < 2 {
+		t.Fatalf("expected remaining fallbacks, got %d", len(fbs))
+	}
+}

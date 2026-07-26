@@ -2,7 +2,9 @@ import { baseApi } from "./baseApi";
 
 export interface CircuitBreakerFallbackHop {
 	provider: string;
-	model: string;
+	/** @deprecated prefer models[] */
+	model?: string;
+	models?: string[];
 	key_id?: string;
 }
 

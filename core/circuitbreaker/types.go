@@ -22,10 +22,13 @@ const (
 
 // FallbackHop is one hop in a multi-level fallback chain.
 // KeyID is optional; when set, Bifrost pins that provider API key.
+// Model is legacy single-model; Models allows multiple models at the same level
+// (expanded in order when building the runtime chain).
 type FallbackHop struct {
-	Provider string `json:"provider"`
-	Model    string `json:"model"`
-	KeyID    string `json:"key_id,omitempty"`
+	Provider string   `json:"provider"`
+	Model    string   `json:"model,omitempty"`
+	Models   []string `json:"models,omitempty"`
+	KeyID    string   `json:"key_id,omitempty"`
 }
 
 // Policy is one circuit-breaker policy.

@@ -613,21 +613,45 @@ func normalizePolicy(p Policy) (Policy, error) {
 		}
 		p.PrimaryKeyIDs = clean
 	}
-	// Build fallbacks from legacy fields if needed
+	// Build fallbacks from legacy fields if needed.
+	// Each hop may list multiple models; keep Models[] and mirror Model=first.
+	// Runtime expansion to a flat chain happens in effectiveFallbacks.
 	hops := make([]FallbackHop, 0, len(p.Fallbacks)+1)
 	for _, h := range p.Fallbacks {
 		h.Provider = strings.TrimSpace(h.Provider)
-		h.Model = strings.TrimSpace(h.Model)
 		h.KeyID = strings.TrimSpace(h.KeyID)
-		if h.Provider == "" || h.Model == "" {
+		if h.Provider == "" {
 			continue
 		}
+		ms := make([]string, 0, len(h.Models)+1)
+		seenHop := map[string]struct{}{}
+		addHopModel := func(m string) {
+			m = strings.TrimSpace(m)
+			if m == "" {
+				return
+			}
+			if _, ok := seenHop[m]; ok {
+				return
+			}
+			seenHop[m] = struct{}{}
+			ms = append(ms, m)
+		}
+		for _, m := range h.Models {
+			addHopModel(m)
+		}
+		addHopModel(h.Model)
+		if len(ms) == 0 {
+			continue
+		}
+		h.Models = ms
+		h.Model = ms[0]
 		hops = append(hops, h)
 	}
 	if len(hops) == 0 && p.FallbackProvider != "" && p.FallbackModel != "" {
 		hops = append(hops, FallbackHop{
 			Provider: p.FallbackProvider,
 			Model:    p.FallbackModel,
+			Models:   []string{p.FallbackModel},
 			KeyID:    p.FallbackKeyID,
 		})
 	}
@@ -700,14 +724,33 @@ func ParseFileConfig(fc *FileConfig) ([]Policy, error) {
 	return out, nil
 }
 
+// effectiveFallbacks returns a flat ordered chain for runtime rewrite.
+// Multi-model hops expand as: hop.models[0], hop.models[1], ... then next hop.
 func effectiveFallbacks(p Policy) []FallbackHop {
-	if len(p.Fallbacks) > 0 {
-		return p.Fallbacks
+	src := p.Fallbacks
+	if len(src) == 0 && p.FallbackProvider != "" && p.FallbackModel != "" {
+		src = []FallbackHop{{Provider: p.FallbackProvider, Model: p.FallbackModel, Models: []string{p.FallbackModel}, KeyID: p.FallbackKeyID}}
 	}
-	if p.FallbackProvider != "" && p.FallbackModel != "" {
-		return []FallbackHop{{Provider: p.FallbackProvider, Model: p.FallbackModel, KeyID: p.FallbackKeyID}}
+	out := make([]FallbackHop, 0, len(src)*2)
+	for _, h := range src {
+		models := h.Models
+		if len(models) == 0 && h.Model != "" {
+			models = []string{h.Model}
+		}
+		for _, m := range models {
+			m = strings.TrimSpace(m)
+			if m == "" {
+				continue
+			}
+			out = append(out, FallbackHop{
+				Provider: h.Provider,
+				Model:    m,
+				Models:   []string{m},
+				KeyID:    h.KeyID,
+			})
+		}
 	}
-	return nil
+	return out
 }
 
 func firstHopProvider(hops []FallbackHop, p Policy) string {
@@ -727,7 +770,15 @@ func firstHopModel(hops []FallbackHop, p Policy) string {
 func formatHopChain(hops []FallbackHop) string {
 	parts := make([]string, 0, len(hops))
 	for i, h := range hops {
-		s := fmt.Sprintf("%d:%s/%s", i+1, h.Provider, h.Model)
+		models := h.Models
+		if len(models) == 0 && h.Model != "" {
+			models = []string{h.Model}
+		}
+		label := strings.Join(models, ",")
+		if label == "" {
+			label = h.Model
+		}
+		s := fmt.Sprintf("%d:%s/{%s}", i+1, h.Provider, label)
 		if h.KeyID != "" {
 			s += "@" + h.KeyID
 		}

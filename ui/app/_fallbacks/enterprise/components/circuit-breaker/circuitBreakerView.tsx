@@ -1,6 +1,6 @@
 /**
  * Circuit Breaker view — routing-rules style list + sheet editor.
- * Supports multi primary models, primary key scoping, multi-level fallbacks.
+ * Supports multi primary models, multi-model fallback hops, key scoping.
  */
 import { Button } from "@/components/ui/button";
 import { ComboboxSelect } from "@/components/ui/combobox";
@@ -30,9 +30,9 @@ import { CircuitBoard, Loader2, Plus, RefreshCw, RotateCcw, Trash2 } from "lucid
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 
-type HopForm = { provider: string; model: string; key_id: string };
+type HopForm = { provider: string; models: string[]; key_id: string };
 
-const emptyHop = (): HopForm => ({ provider: "", model: "", key_id: "" });
+const emptyHop = (): HopForm => ({ provider: "", models: [], key_id: "" });
 
 type FormState = {
 	name: string;
@@ -69,14 +69,20 @@ function slugPart(s: string) {
 		.slice(0, 32);
 }
 
+function hopModelsOf(h: CircuitBreakerFallbackHop): string[] {
+	const ms = [...(h.models || [])];
+	if (h.model && !ms.includes(h.model)) ms.unshift(h.model);
+	return ms.filter(Boolean);
+}
+
 function autoName(primaryProv: string, primaryModels: string[], hops: HopForm[]) {
 	const a = slugPart(primaryProv);
 	const b = slugPart(primaryModels[0] || "");
 	if (!a || !b) return "";
 	const multi = primaryModels.length > 1 ? `-${primaryModels.length}m` : "";
-	const last = hops.find((h) => h.provider && h.model) || hops[0];
-	if (last?.provider && last?.model) {
-		return `${a}-${b}${multi}-to-${slugPart(last.provider)}-${slugPart(last.model)}`.replace(/-+/g, "-");
+	const last = hops.find((h) => h.provider && h.models.length > 0) || hops[0];
+	if (last?.provider && last.models[0]) {
+		return `${a}-${b}${multi}-to-${slugPart(last.provider)}-${slugPart(last.models[0])}`.replace(/-+/g, "-");
 	}
 	return `${a}-${b}${multi}-cb`;
 }
@@ -87,24 +93,31 @@ function primaryModelsOf(p: CircuitBreakerPolicy): string[] {
 	return ms.filter(Boolean);
 }
 
+/** Collapse consecutive same provider+key hops into multi-model hops for editing. */
 function hopsFromPolicy(p: CircuitBreakerPolicy): HopForm[] {
+	const raw: HopForm[] = [];
 	if (p.fallbacks && p.fallbacks.length > 0) {
-		return p.fallbacks.map((h) => ({
-			provider: h.provider || "",
-			model: h.model || "",
-			key_id: h.key_id || "",
-		}));
+		for (const h of p.fallbacks) {
+			const models = hopModelsOf(h);
+			if (!h.provider || models.length === 0) continue;
+			const key = h.key_id || "";
+			const prev = raw[raw.length - 1];
+			if (prev && prev.provider === h.provider && prev.key_id === key) {
+				for (const m of models) {
+					if (!prev.models.includes(m)) prev.models.push(m);
+				}
+			} else {
+				raw.push({ provider: h.provider, models: [...models], key_id: key });
+			}
+		}
+	} else if (p.fallback_provider && p.fallback_model) {
+		raw.push({
+			provider: p.fallback_provider,
+			models: [p.fallback_model],
+			key_id: p.fallback_key_id || "",
+		});
 	}
-	if (p.fallback_provider && p.fallback_model) {
-		return [
-			{
-				provider: p.fallback_provider,
-				model: p.fallback_model,
-				key_id: p.fallback_key_id || "",
-			},
-		];
-	}
-	return [emptyHop()];
+	return raw.length > 0 ? raw : [emptyHop()];
 }
 
 function stateBadge(state: string) {
@@ -123,13 +136,13 @@ function stateBadge(state: string) {
 }
 
 function chainLabel(p: CircuitBreakerPolicy) {
-	const hops = hopsFromPolicy(p).filter((h) => h.provider && h.model);
+	const hops = hopsFromPolicy(p).filter((h) => h.provider && h.models.length > 0);
 	const models = primaryModelsOf(p);
 	const head = models.length
 		? `${p.primary_provider}/{${models.join(",")}}`
 		: `${p.primary_provider}/${p.primary_model || "?"}`;
 	if (hops.length === 0) return head;
-	return [head, ...hops.map((h) => `${h.provider}/${h.model}`)].join(" → ");
+	return [head, ...hops.map((h) => `${h.provider}/{${h.models.join(",")}}`)].join(" → ");
 }
 
 export default function CircuitBreakerView() {
@@ -232,7 +245,7 @@ export default function CircuitBreakerView() {
 				...prev.fallbacks,
 				{
 					provider: prev.primary_provider || "",
-					model: "",
+					models: [],
 					key_id: "",
 				},
 			],
@@ -249,19 +262,23 @@ export default function CircuitBreakerView() {
 	const onSave = async () => {
 		setError(null);
 		const hops: CircuitBreakerFallbackHop[] = form.fallbacks
-			.filter((h) => h.provider.trim() && h.model.trim())
-			.map((h) => ({
-				provider: h.provider.trim(),
-				model: h.model.trim(),
-				...(h.key_id.trim() ? { key_id: h.key_id.trim() } : {}),
-			}));
+			.filter((h) => h.provider.trim() && h.models.some((m) => m.trim()))
+			.map((h) => {
+				const models = h.models.map((m) => m.trim()).filter(Boolean);
+				return {
+					provider: h.provider.trim(),
+					models,
+					model: models[0],
+					...(h.key_id.trim() ? { key_id: h.key_id.trim() } : {}),
+				};
+			});
 		const primaryModels = form.primary_models.map((m) => m.trim()).filter(Boolean);
 		if (!form.primary_provider.trim() || primaryModels.length === 0) {
 			setError("请选择主提供商，并至少选择一个主模型");
 			return;
 		}
 		if (hops.length === 0) {
-			setError("请至少配置一级备用（提供商+模型）");
+			setError("请至少配置一级备用（提供商+至少一个模型）");
 			return;
 		}
 		const name =
@@ -275,7 +292,7 @@ export default function CircuitBreakerView() {
 			primary_key_ids: form.primary_key_ids.length > 0 ? form.primary_key_ids : undefined,
 			fallbacks: hops,
 			fallback_provider: hops[0].provider,
-			fallback_model: hops[0].model,
+			fallback_model: hops[0].model || hops[0].models?.[0],
 			fallback_key_id: hops[0].key_id,
 			default_cooldown: form.default_cooldown.trim() || "30s",
 			failure_threshold: Number(form.failure_threshold) || 5,
@@ -309,7 +326,7 @@ export default function CircuitBreakerView() {
 					<div>
 						<h1 className="text-xl font-semibold">{t("Circuit Breaker")}</h1>
 						<p className="text-muted-foreground mt-1 max-w-2xl text-sm">
-							支持多主模型、API Key 级熔断与多级备用链。主通道持续失败后自动按序切备，冷却后再试主。
+							主/备均可多模型；Key 级熔断；多级备用链。主挂后按序切备，冷却后再试主。
 						</p>
 					</div>
 				</div>
@@ -354,7 +371,7 @@ export default function CircuitBreakerView() {
 					<ul className="divide-y">
 						{policies.map((p) => {
 							const st = stateByName.get(p.name);
-							const hops = hopsFromPolicy(p).filter((h) => h.provider && h.model);
+							const hops = hopsFromPolicy(p).filter((h) => h.provider && h.models.length > 0);
 							const models = primaryModelsOf(p);
 							return (
 								<li
@@ -375,7 +392,7 @@ export default function CircuitBreakerView() {
 													{p.primary_key_ids!.length} key
 												</span>
 											)}
-											{hops.length > 1 && (
+											{hops.length > 0 && (
 												<span className="bg-muted rounded px-1.5 py-0.5 text-[10px] font-medium">{hops.length} 级备用</span>
 											)}
 										</div>
@@ -441,9 +458,7 @@ export default function CircuitBreakerView() {
 				<SheetContent className="flex w-full flex-col gap-0 overflow-y-auto sm:max-w-xl" side="right">
 					<SheetHeader className="border-b px-6 py-4 text-left">
 						<SheetTitle>{editing ? `${t("Edit")} · ${editing.name}` : t("Create policy")}</SheetTitle>
-						<SheetDescription>
-							主：提供商 + 多模型 + Key（可选）。备：有序多级链，每级可指定 Key。
-						</SheetDescription>
+						<SheetDescription>主/备均可多选模型；每级备用可钉 Key。运行时按级内模型顺序展开接力。</SheetDescription>
 					</SheetHeader>
 
 					<div className="flex flex-1 flex-col gap-6 px-6 py-5">
@@ -502,9 +517,6 @@ export default function CircuitBreakerView() {
 										clearable
 										className="w-full"
 									/>
-									<p className="text-muted-foreground text-[11px]">
-										同一策略监控多个主模型，共用 Key 与多级备用链，无需每个模型单独建策略。
-									</p>
 								</div>
 								<div className="space-y-1.5">
 									<Label className="text-xs">主 API Key（可多选，可选）</Label>
@@ -549,7 +561,7 @@ export default function CircuitBreakerView() {
 								<div>
 									<Label className="text-base">多级备用链</Label>
 									<p className="text-muted-foreground mt-0.5 text-xs">
-										按顺序尝试；第 1 级先接，失败再下一级（与路由规则 Fallbacks 类似）
+										每级可多选模型（同 Key 下按模型顺序试）；再进入下一级。
 									</p>
 								</div>
 								<Button type="button" variant="outline" size="sm" onClick={addHop} className="gap-1">
@@ -577,44 +589,49 @@ export default function CircuitBreakerView() {
 													</Button>
 												)}
 											</div>
-											<div className="grid gap-2 sm:grid-cols-2">
-												<ComboboxSelect
-													options={providerOptions}
-													value={hop.provider || null}
-													onValueChange={(v) => setHop(index, { provider: v ?? "", model: "", key_id: "" })}
-													placeholder={t("Select provider")}
-													className="h-9"
-													noPortal
-												/>
-												<ModelMultiselect
-													isSingleSelect
-													provider={hop.provider || undefined}
-													value={hop.model}
-													onChange={(model) => setHop(index, { model })}
-													placeholder={t("Search models...")}
-													disabled={!hop.provider}
-													clearable
-													className="!h-9 !min-h-9 w-full"
-												/>
-											</div>
-											<div className="space-y-1">
-												<Label className="text-xs">备用 Key（可选）</Label>
-												<ComboboxSelect
-													options={[{ label: "（不指定 / 自动选）", value: "" }, ...hopKeys]}
-													value={hop.key_id || ""}
-													onValueChange={(v) => setHop(index, { key_id: v ?? "" })}
-													placeholder="可选：钉死某个 Key"
-													className="h-9"
-													noPortal
-													disabled={!hop.provider}
-												/>
+											<div className="space-y-2">
+												<div className="space-y-1">
+													<Label className="text-xs">提供商</Label>
+													<ComboboxSelect
+														options={providerOptions}
+														value={hop.provider || null}
+														onValueChange={(v) => setHop(index, { provider: v ?? "", models: [], key_id: "" })}
+														placeholder={t("Select provider")}
+														className="h-9"
+														noPortal
+													/>
+												</div>
+												<div className="space-y-1">
+													<Label className="text-xs">模型（可多选）</Label>
+													<ModelMultiselect
+														provider={hop.provider || undefined}
+														value={hop.models}
+														onChange={(models) => setHop(index, { models })}
+														placeholder="如 sol + terra"
+														disabled={!hop.provider}
+														clearable
+														className="w-full"
+													/>
+												</div>
+												<div className="space-y-1">
+													<Label className="text-xs">备用 Key（可选）</Label>
+													<ComboboxSelect
+														options={[{ label: "（不指定 / 自动选）", value: "" }, ...hopKeys]}
+														value={hop.key_id || ""}
+														onValueChange={(v) => setHop(index, { key_id: v ?? "" })}
+														placeholder="可选：钉死某个 Key"
+														className="h-9"
+														noPortal
+														disabled={!hop.provider}
+													/>
+												</div>
 											</div>
 										</div>
 									);
 								})}
 							</div>
 							<p className="text-muted-foreground text-xs">
-								熔断打开后：请求改写到第 1 级，其余级写入请求 fallbacks，按序接力。
+								运行时展开：级1模型A → 级1模型B → 级2模型…；第一跳改写请求，其余写入 fallbacks。
 							</p>
 						</div>
 
