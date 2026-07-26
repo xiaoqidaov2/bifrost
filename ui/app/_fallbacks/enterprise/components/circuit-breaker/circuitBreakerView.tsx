@@ -129,20 +129,28 @@ function stateBadge(state: string) {
 					? "bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-200"
 					: "bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-200"
 			}`}
+			title={open ? "主线路已挂，当前流量走备用" : "主线路正常，请求还在走主线路"}
 		>
-			{state === "open" ? t("open") : state === "closed" ? t("closed") : state}
+			{open ? "已切备用" : "正常"}
 		</span>
 	);
 }
 
+function shortModel(m: string) {
+	return m.replace(/^gpt-5\.6-/, "").replace(/^gpt-/, "");
+}
+
 function chainLabel(p: CircuitBreakerPolicy) {
 	const hops = hopsFromPolicy(p).filter((h) => h.provider && h.models.length > 0);
-	const models = primaryModelsOf(p);
-	const head = models.length
-		? `${p.primary_provider}/{${models.join(",")}}`
-		: `${p.primary_provider}/${p.primary_model || "?"}`;
+	const models = primaryModelsOf(p).map(shortModel);
+	const head = models.length ? `主：${models.join("、")}` : "主：?";
 	if (hops.length === 0) return head;
-	return [head, ...hops.map((h) => `${h.provider}/{${h.models.join(",")}}`)].join(" → ");
+	const rest = hops.map((h, i) => {
+		const ms = h.models.map(shortModel).join("、");
+		const keyHint = h.key_id ? "" : "";
+		return `备${i + 1}：${ms}${keyHint}`;
+	});
+	return [head, ...rest].join(" → ");
 }
 
 export default function CircuitBreakerView() {
@@ -274,11 +282,11 @@ export default function CircuitBreakerView() {
 			});
 		const primaryModels = form.primary_models.map((m) => m.trim()).filter(Boolean);
 		if (!form.primary_provider.trim() || primaryModels.length === 0) {
-			setError("请选择主提供商，并至少选择一个主模型");
+			setError("请选择平时用的渠道，并至少选一个模型");
 			return;
 		}
 		if (hops.length === 0) {
-			setError("请至少配置一级备用（提供商+至少一个模型）");
+			setError("请至少加一档备用（渠道 + 至少一个模型）");
 			return;
 		}
 		const name =
@@ -324,9 +332,11 @@ export default function CircuitBreakerView() {
 				<div className="flex items-start gap-3">
 					<CircuitBoard className="text-primary mt-1 h-8 w-8" strokeWidth={1.5} />
 					<div>
-						<h1 className="text-xl font-semibold">{t("Circuit Breaker")}</h1>
+						<h1 className="text-xl font-semibold">熔断器</h1>
 						<p className="text-muted-foreground mt-1 max-w-2xl text-sm">
-							主/备均可多模型；Key 级熔断；多级备用链。主挂后按序切备，冷却后再试主。
+							一句话：主线路老失败 → 自动换备用 → 过一会儿再试主线路。
+							<br />
+							绿色「正常」= 还在走主线路（不是坏了）。红色「已切备用」= 已经切到备用了。
 						</p>
 					</div>
 				</div>
@@ -340,11 +350,11 @@ export default function CircuitBreakerView() {
 						}}
 					>
 						<RefreshCw className="mr-2 h-4 w-4" />
-						{t("Refresh")}
+						刷新
 					</Button>
 					<Button size="sm" onClick={openCreate} data-testid="circuit-breaker-create-open">
 						<Plus className="mr-2 h-4 w-4" />
-						{t("Create policy")}
+						新建规则
 					</Button>
 				</div>
 			</div>
@@ -352,19 +362,19 @@ export default function CircuitBreakerView() {
 			<div className="rounded-lg border">
 				<div className="bg-muted/40 flex items-center justify-between border-b px-4 py-3">
 					<div className="text-sm font-medium">
-						{t("Policies")}
+						我的切换规则
 						<span className="text-muted-foreground ml-2 font-normal">
-							{loadingPolicies || loadingState ? t("Loading…") : `${policies.length} ${t("policy(ies)")}`}
+							{loadingPolicies || loadingState ? "加载中…" : `共 ${policies.length} 条`}
 						</span>
 					</div>
 				</div>
 				{policies.length === 0 && !loadingPolicies ? (
 					<div className="text-muted-foreground flex flex-col items-center gap-3 px-4 py-16 text-center text-sm">
 						<CircuitBoard className="h-10 w-10 opacity-40" />
-						<p>{t("No policies yet. Create one above or set circuit_breaker_config in config.json.")}</p>
+						<p>还没有规则。点右上角「新建规则」，告诉网关：平时走哪条，挂了换哪条。</p>
 						<Button size="sm" onClick={openCreate}>
 							<Plus className="mr-2 h-4 w-4" />
-							{t("Create policy")}
+							新建规则
 						</Button>
 					</div>
 				) : (
@@ -373,6 +383,7 @@ export default function CircuitBreakerView() {
 							const st = stateByName.get(p.name);
 							const hops = hopsFromPolicy(p).filter((h) => h.provider && h.models.length > 0);
 							const models = primaryModelsOf(p);
+							const keyNameById = new Map(allKeysData.map((k) => [k.key_id, k.name || k.key_id]));
 							return (
 								<li
 									key={p.name}
@@ -383,25 +394,30 @@ export default function CircuitBreakerView() {
 										<div className="flex flex-wrap items-center gap-2">
 											<span className="font-medium">{p.name}</span>
 											{stateBadge(st?.state ?? "closed")}
-											{p.enabled === false && <span className="text-muted-foreground text-xs">{t("disabled")}</span>}
-											{models.length > 1 && (
-												<span className="bg-muted rounded px-1.5 py-0.5 text-[10px] font-medium">{models.length} 主模型</span>
+											{p.enabled === false && <span className="text-muted-foreground text-xs">已停用</span>}
+											{models.length > 0 && (
+												<span className="bg-muted rounded px-1.5 py-0.5 text-[10px] font-medium">
+													监控 {models.map(shortModel).join("、")}
+												</span>
 											)}
 											{(p.primary_key_ids?.length ?? 0) > 0 && (
 												<span className="bg-muted rounded px-1.5 py-0.5 text-[10px] font-medium">
-													{p.primary_key_ids!.length} key
+													主密钥 {p.primary_key_ids!.map((id) => keyNameById.get(id) || id.slice(0, 8)).join("、")}
 												</span>
 											)}
 											{hops.length > 0 && (
-												<span className="bg-muted rounded px-1.5 py-0.5 text-[10px] font-medium">{hops.length} 级备用</span>
+												<span className="bg-muted rounded px-1.5 py-0.5 text-[10px] font-medium">{hops.length} 档备用</span>
 											)}
 										</div>
-										<p className="text-muted-foreground mt-1 truncate font-mono text-xs">{chainLabel(p)}</p>
+										<p className="text-muted-foreground mt-1 text-xs">{chainLabel(p)}</p>
 										{st && (
 											<p className="text-muted-foreground mt-1 text-xs">
-												{t("failures")}={st.failure_count}
-												{st.last_reason ? ` · ${st.last_reason}` : ""}
-												{st.open_until ? ` · ${t("open until")} ${st.open_until}` : ""}
+												{st.state === "open"
+													? `正在走备用；约 ${st.open_until ? new Date(st.open_until).toLocaleString() : "稍后"} 再试主线路`
+													: st.failure_count > 0
+														? `主线路最近失败 ${st.failure_count} 次（还没到换线门槛）`
+														: "主线路正常，暂无失败记录"}
+												{st.last_reason ? ` · 原因：${st.last_reason}` : ""}
 											</p>
 										)}
 										{st?.key_states && st.key_states.length > 0 && (
@@ -411,7 +427,9 @@ export default function CircuitBreakerView() {
 														key={ks.key_id}
 														className="bg-muted inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px]"
 													>
-														<code className="max-w-[72px] truncate">{ks.key_id}</code>
+														<span className="max-w-[100px] truncate">
+															{keyNameById.get(ks.key_id) || ks.key_id.slice(0, 8)}
+														</span>
 														{stateBadge(ks.state)}
 													</span>
 												))}
@@ -425,14 +443,14 @@ export default function CircuitBreakerView() {
 											onClick={async () => {
 												await resetPolicy(p.name);
 												refetchState();
-												toast.success("已复位");
+												toast.success("已恢复主线路");
 											}}
 										>
 											<RotateCcw className="mr-1 h-3.5 w-3.5" />
-											{t("Reset")}
+											恢复主线路
 										</Button>
 										<Button variant="outline" size="sm" onClick={() => openEdit(p)}>
-											{t("Edit")}
+											修改
 										</Button>
 										<Button
 											variant="destructive"
@@ -441,7 +459,7 @@ export default function CircuitBreakerView() {
 												await deletePolicy(p.name);
 												refetchPolicies();
 												refetchState();
-												toast.success(t("Deleted successfully"));
+												toast.success("已删除");
 											}}
 										>
 											<Trash2 className="h-4 w-4" />
@@ -457,24 +475,26 @@ export default function CircuitBreakerView() {
 			<Sheet open={sheetOpen} onOpenChange={setSheetOpen}>
 				<SheetContent className="flex w-full flex-col gap-0 overflow-y-auto sm:max-w-xl" side="right">
 					<SheetHeader className="border-b px-6 py-4 text-left">
-						<SheetTitle>{editing ? `${t("Edit")} · ${editing.name}` : t("Create policy")}</SheetTitle>
-						<SheetDescription>主/备均可多选模型；每级备用可钉 Key。运行时按级内模型顺序展开接力。</SheetDescription>
+						<SheetTitle>{editing ? `修改 · ${editing.name}` : "新建切换规则"}</SheetTitle>
+						<SheetDescription>
+							分三块填：① 平时走哪条 ② 挂了换哪几档备用 ③ 失败几次、休息多久。
+						</SheetDescription>
 					</SheetHeader>
 
 					<div className="flex flex-1 flex-col gap-6 px-6 py-5">
 						<div className="space-y-4">
 							<div className="space-y-2">
-								<Label>{t("Name")}</Label>
+								<Label>规则名称</Label>
 								<Input
 									value={form.name}
 									onChange={(e) => setForm({ ...form, name: e.target.value, nameTouched: true })}
-									placeholder={t("Auto-generated from primary → fallback")}
+									placeholder="可自动生成，也可自己起名"
 									disabled={!!editing}
 								/>
 							</div>
 							<div className="flex items-center gap-2">
 								<Switch checked={form.enabled} onCheckedChange={(v) => setForm({ ...form, enabled: v })} id="cb-en" />
-								<Label htmlFor="cb-en">{t("Enabled")}</Label>
+								<Label htmlFor="cb-en">启用这条规则</Label>
 							</div>
 						</div>
 
@@ -482,14 +502,14 @@ export default function CircuitBreakerView() {
 
 						<div className="space-y-3">
 							<div>
-								<Label className="text-base">主通道（监控对象）</Label>
+								<Label className="text-base">① 平时走哪条（主线路）</Label>
 								<p className="text-muted-foreground mt-0.5 text-xs">
-									可多选主模型（同一套 Key/备用链）。Key 勾选后按 Key 分别熔断；全部 Key 熔断才走备用链。
+									选渠道 + 模型。密钥可勾多个：勾了就按密钥分别计数；都挂了才换备用。不勾=该模型下所有密钥一起算。
 								</p>
 							</div>
 							<div className="space-y-3 rounded-lg border p-3">
 								<div className="space-y-1.5">
-									<Label className="text-xs">{t("Primary provider")}</Label>
+									<Label className="text-xs">渠道</Label>
 									<ComboboxSelect
 										options={providerOptions}
 										value={form.primary_provider || null}
@@ -501,27 +521,27 @@ export default function CircuitBreakerView() {
 												primary_key_ids: [],
 											}))
 										}
-										placeholder={t("Select provider")}
-										emptyMessage={t("No providers found")}
+										placeholder="选渠道，比如 catai"
+										emptyMessage="还没有渠道，先去「模型提供商」添加"
 										noPortal
 									/>
 								</div>
 								<div className="space-y-1.5">
-									<Label className="text-xs">主模型（可多选）</Label>
+									<Label className="text-xs">模型（可多选）</Label>
 									<ModelMultiselect
 										provider={form.primary_provider || undefined}
 										value={form.primary_models}
 										onChange={(models) => setForm((prev) => ({ ...prev, primary_models: models }))}
-										placeholder="选择一个或多个主模型，如 sol + terra"
+										placeholder="例如同时勾 sol 和 terra"
 										disabled={!form.primary_provider}
 										clearable
 										className="w-full"
 									/>
 								</div>
 								<div className="space-y-1.5">
-									<Label className="text-xs">主 API Key（可多选，可选）</Label>
+									<Label className="text-xs">主线路密钥（可选，可多选）</Label>
 									{primaryKeyOptions.length === 0 ? (
-										<p className="text-muted-foreground text-xs">该提供商暂无 Key，或先到「模型提供商」添加</p>
+										<p className="text-muted-foreground text-xs">该渠道还没有密钥，先去「模型提供商」添加</p>
 									) : (
 										<div className="flex flex-col gap-1.5">
 											{primaryKeyOptions.map((opt) => {
@@ -559,14 +579,14 @@ export default function CircuitBreakerView() {
 						<div className="space-y-3">
 							<div className="flex items-center justify-between gap-2">
 								<div>
-									<Label className="text-base">多级备用链</Label>
+									<Label className="text-base">② 挂了换哪几档（备用）</Label>
 									<p className="text-muted-foreground mt-0.5 text-xs">
-										每级可多选模型（同 Key 下按模型顺序试）；再进入下一级。
+										从上到下试：第 1 档先上，不行再第 2 档。每一档里也可以多选模型。
 									</p>
 								</div>
 								<Button type="button" variant="outline" size="sm" onClick={addHop} className="gap-1">
 									<Plus className="h-4 w-4" />
-									添加备用级
+									加一档备用
 								</Button>
 							</div>
 							<div className="space-y-3">
@@ -582,7 +602,7 @@ export default function CircuitBreakerView() {
 									return (
 										<div key={index} className="space-y-2 rounded-lg border p-3" data-testid={`cb-hop-${index}`}>
 											<div className="flex items-center justify-between">
-												<span className="text-muted-foreground text-sm font-medium">备用级 {index + 1}</span>
+												<span className="text-muted-foreground text-sm font-medium">备用第 {index + 1} 档</span>
 												{form.fallbacks.length > 1 && (
 													<Button type="button" variant="ghost" size="sm" className="h-8 px-2" onClick={() => removeHop(index)}>
 														<Trash2 className="h-4 w-4" />
@@ -591,12 +611,12 @@ export default function CircuitBreakerView() {
 											</div>
 											<div className="space-y-2">
 												<div className="space-y-1">
-													<Label className="text-xs">提供商</Label>
+													<Label className="text-xs">渠道</Label>
 													<ComboboxSelect
 														options={providerOptions}
 														value={hop.provider || null}
 														onValueChange={(v) => setHop(index, { provider: v ?? "", models: [], key_id: "" })}
-														placeholder={t("Select provider")}
+														placeholder="选渠道"
 														className="h-9"
 														noPortal
 													/>
@@ -607,19 +627,19 @@ export default function CircuitBreakerView() {
 														provider={hop.provider || undefined}
 														value={hop.models}
 														onChange={(models) => setHop(index, { models })}
-														placeholder="如 sol + terra"
+														placeholder="例如 sol + terra"
 														disabled={!hop.provider}
 														clearable
 														className="w-full"
 													/>
 												</div>
 												<div className="space-y-1">
-													<Label className="text-xs">备用 Key（可选）</Label>
+													<Label className="text-xs">用哪把密钥（可选）</Label>
 													<ComboboxSelect
-														options={[{ label: "（不指定 / 自动选）", value: "" }, ...hopKeys]}
+														options={[{ label: "不指定，系统自动选", value: "" }, ...hopKeys]}
 														value={hop.key_id || ""}
 														onValueChange={(v) => setHop(index, { key_id: v ?? "" })}
-														placeholder="可选：钉死某个 Key"
+														placeholder="可选：指定密钥"
 														className="h-9"
 														noPortal
 														disabled={!hop.provider}
@@ -631,22 +651,21 @@ export default function CircuitBreakerView() {
 								})}
 							</div>
 							<p className="text-muted-foreground text-xs">
-								运行时展开：级1模型A → 级1模型B → 级2模型…；第一跳改写请求，其余写入 fallbacks。
+								实际顺序：第1档里的模型按勾选顺序试完，再试第2档……
 							</p>
 						</div>
 
 						<Separator />
 
+						<div className="space-y-2">
+							<Label className="text-base">③ 什么时候换线</Label>
+							<p className="text-muted-foreground text-xs">
+								例如：60 秒内失败 3 次就切备用，休息 30 秒后再试主线路。
+							</p>
+						</div>
 						<div className="grid gap-3 sm:grid-cols-3">
 							<div className="space-y-1.5">
-								<Label className="text-xs">{t("Cooldown")}</Label>
-								<Input
-									value={form.default_cooldown}
-									onChange={(e) => setForm({ ...form, default_cooldown: e.target.value })}
-								/>
-							</div>
-							<div className="space-y-1.5">
-								<Label className="text-xs">{t("Failure threshold")}</Label>
+								<Label className="text-xs">失败几次就换线</Label>
 								<Input
 									type="number"
 									value={form.failure_threshold}
@@ -654,10 +673,19 @@ export default function CircuitBreakerView() {
 								/>
 							</div>
 							<div className="space-y-1.5">
-								<Label className="text-xs">{t("Failure window")}</Label>
+								<Label className="text-xs">在多长时间内计数</Label>
 								<Input
 									value={form.failure_window}
 									onChange={(e) => setForm({ ...form, failure_window: e.target.value })}
+									placeholder="如 60s"
+								/>
+							</div>
+							<div className="space-y-1.5">
+								<Label className="text-xs">休息多久再试主线路</Label>
+								<Input
+									value={form.default_cooldown}
+									onChange={(e) => setForm({ ...form, default_cooldown: e.target.value })}
+									placeholder="如 30s"
 								/>
 							</div>
 						</div>
@@ -667,11 +695,11 @@ export default function CircuitBreakerView() {
 
 					<div className="bg-card sticky bottom-0 flex justify-end gap-3 border-t px-6 py-4">
 						<Button type="button" variant="outline" onClick={() => setSheetOpen(false)} disabled={saving}>
-							{t("Cancel")}
+							取消
 						</Button>
 						<Button type="button" onClick={onSave} disabled={saving} data-testid="circuit-breaker-save">
 							{saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-							{editing ? t("Update") : t("Create")}
+							{editing ? "保存" : "创建"}
 						</Button>
 					</div>
 				</SheetContent>
