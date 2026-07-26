@@ -57,14 +57,16 @@ export default function ChineseOverlay() {
 				}
 			}
 			// Common attributes
-			root.querySelectorAll?.("[placeholder],[title],[aria-label]").forEach((el) => {
-				for (const attr of ["placeholder", "title", "aria-label"] as const) {
-					const v = el.getAttribute(attr);
-					if (!v) continue;
-					const nv = translateText(v);
-					if (nv != null) el.setAttribute(attr, nv.trim());
-				}
-			});
+			if (root instanceof Element) {
+				root.querySelectorAll("[placeholder],[title],[aria-label]").forEach((el) => {
+					for (const attr of ["placeholder", "title", "aria-label"] as const) {
+						const v = el.getAttribute(attr);
+						if (!v) continue;
+						const nv = translateText(v);
+						if (nv != null) el.setAttribute(attr, nv.trim());
+					}
+				});
+			}
 		};
 
 		walk(document.body);
