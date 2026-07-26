@@ -160,11 +160,11 @@ export default function MCPServersPage() {
 	}
 
 	return (
-		<div className="dark:bg-card no-padding-parent no-border-parent h-[calc(100dvh_-_16px)]">
-			<div className="bg-background flex h-full w-full grow gap-3">
+		<div className="dark:bg-card no-padding-parent no-border-parent flex h-[calc(100dvh-1rem)] min-h-0 flex-col md:h-[calc(100dvh_-_16px)]">
+			<div className="bg-background flex h-full min-h-0 w-full grow flex-col gap-2 md:flex-row md:gap-3">
 				<MCPClientsFilterSidebar filters={filters} onFiltersChange={setFilters} />
-				<div className="bg-card h-full w-full overflow-hidden rounded-l-md">
-					<div className="flex h-full flex-col p-4">{table}</div>
+				<div className="bg-card h-full min-h-0 min-w-0 w-full overflow-hidden rounded-md md:rounded-l-md">
+					<div className="flex h-full flex-col p-3 md:p-4">{table}</div>
 				</div>
 			</div>
 		</div>

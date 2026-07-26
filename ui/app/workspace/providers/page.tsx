@@ -163,7 +163,7 @@ export default function Providers() {
 	}
 
 	return (
-		<div className="flex h-full w-full flex-row gap-4">
+		<div className="flex h-full min-h-0 w-full flex-col gap-3 md:flex-row md:gap-4">
 			<ConfirmDeleteProviderDialog
 				provider={selectedProvider!}
 				show={showDeleteProviderDialog}
@@ -191,10 +191,13 @@ export default function Providers() {
 					setShowCustomProviderSheet(false);
 				}}
 			/>
-			<div className="flex flex-col" style={{ maxHeight: "calc(100vh - 70px)", width: "300px" }}>
+			{/* Provider list: horizontal chips on mobile, fixed left rail on desktop */}
+			<div
+				className="flex w-full shrink-0 flex-col md:max-h-[calc(100vh-70px)] md:w-[280px] md:min-w-[240px]"
+			>
 				<TooltipProvider>
-					<div className="custom-scrollbar flex-1 overflow-y-auto">
-						<div className="rounded-md bg-zinc-50/50 p-4 dark:bg-zinc-800/20">
+					<div className="custom-scrollbar max-h-[40vh] overflow-y-auto md:max-h-none md:flex-1">
+						<div className="rounded-md bg-zinc-50/50 p-3 dark:bg-zinc-800/20 md:p-4">
 							{/* Configured Providers (standard with keys + custom) */}
 							{configuredProviders.length > 0 && (
 								<div className="mb-4">
@@ -257,17 +260,19 @@ export default function Providers() {
 				</TooltipProvider>
 			</div>
 			{isLoadingProvider && (
-				<div className="bg-muted/10 flex w-full items-center justify-center rounded-md" style={{ maxHeight: "calc(100vh - 300px)" }}>
+				<div className="bg-muted/10 flex min-h-[40vh] w-full min-w-0 flex-1 items-center justify-center rounded-md md:max-h-[calc(100vh-300px)]">
 					<FullPageLoader />
 				</div>
 			)}
 			{!selectedProvider && (
-				<div className="bg-muted/10 flex w-full items-center justify-center rounded-md" style={{ maxHeight: "calc(100vh - 300px)" }}>
+				<div className="bg-muted/10 flex min-h-[30vh] w-full min-w-0 flex-1 items-center justify-center rounded-md md:max-h-[calc(100vh-300px)]">
 					<div className="text-muted-foreground text-sm">Select a provider</div>
 				</div>
 			)}
 			{!isLoadingProvider && selectedProvider && (
-				<ModelProviderConfig provider={selectedProvider} onRequestDelete={() => setShowDeleteProviderDialog(true)} />
+				<div className="min-h-0 min-w-0 flex-1 overflow-auto">
+					<ModelProviderConfig provider={selectedProvider} onRequestDelete={() => setShowDeleteProviderDialog(true)} />
+				</div>
 			)}
 		</div>
 	);

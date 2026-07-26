@@ -154,14 +154,14 @@ export default function MCPLibraryPage() {
 	const isCatalogEmpty = !isFetching && totalCount === 0 && !debouncedSearch && !hasActiveFilters;
 
 	return (
-		<div className="dark:bg-card no-padding-parent no-border-parent h-[calc(100dvh_-_16px)]">
-			<div className="bg-background flex h-full w-full grow gap-3">
+		<div className="dark:bg-card no-padding-parent no-border-parent flex h-[calc(100dvh-1rem)] min-h-0 flex-col md:h-[calc(100dvh_-_16px)]">
+			<div className="bg-background flex h-full min-h-0 w-full grow flex-col gap-2 md:flex-row md:gap-3">
 				{/* Sidebar Filters */}
 				<MCPLibraryFilterSidebar filters={filters} onFiltersChange={setFilters} />
 
 				{/* Main Content */}
-				<div className="bg-card h-full w-full rounded-l-md">
-					<div className="flex h-full flex-col gap-4 p-4 pb-2">
+				<div className="bg-card h-full min-h-0 min-w-0 w-full rounded-md md:rounded-l-md">
+					<div className="flex h-full flex-col gap-4 p-3 pb-2 md:p-4">
 						{/* Header */}
 						<div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
 							<div className="space-y-1">

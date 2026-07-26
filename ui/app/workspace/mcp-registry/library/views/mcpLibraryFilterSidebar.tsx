@@ -4,9 +4,10 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/component
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scrollArea";
 import { Skeleton } from "@/components/ui/skeleton";
+import { FilterSidebarChrome, useFilterSidebarCollapsed } from "@/components/filters/filterSidebarChrome";
 import { useGetMCPLibraryFilterDataQuery } from "@/lib/store";
 import { cn } from "@/lib/utils";
-import { ChevronDown, PanelLeftClose, PanelLeftOpen, RotateCcw, Search } from "lucide-react";
+import { ChevronDown, RotateCcw, Search } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 const COLLAPSE_STORAGE_KEY = "mcp-library-filter-sidebar-collapsed";
@@ -39,23 +40,7 @@ interface SidebarProps {
 // ---------------------------------------------------------------------------
 
 export function MCPLibraryFilterSidebar({ filters, onFiltersChange }: SidebarProps) {
-	const [collapsed, setCollapsed] = useState(false);
-
-	useEffect(() => {
-		if (typeof window === "undefined") return;
-		const stored = window.localStorage.getItem(COLLAPSE_STORAGE_KEY);
-		if (stored === "true") setCollapsed(true);
-	}, []);
-
-	const toggleCollapsed = useCallback(() => {
-		setCollapsed((prev) => {
-			const next = !prev;
-			if (typeof window !== "undefined") {
-				window.localStorage.setItem(COLLAPSE_STORAGE_KEY, String(next));
-			}
-			return next;
-		});
-	}, []);
+	const { collapsed, toggleCollapsed, isMobile } = useFilterSidebarCollapsed(COLLAPSE_STORAGE_KEY);
 
 	const activeFilterCount = useMemo(() => {
 		return filters.categories.length + filters.connection_types.length + filters.auth_types.length + filters.tags.length;
@@ -67,58 +52,15 @@ export function MCPLibraryFilterSidebar({ filters, onFiltersChange }: SidebarPro
 
 	const { data: filterData, isLoading, isError, refetch } = useGetMCPLibraryFilterDataQuery();
 
-	if (collapsed) {
-		return (
-			<button
-				type="button"
-				onClick={toggleCollapsed}
-				className="bg-card group flex h-full w-10 shrink-0 cursor-pointer flex-col items-center gap-3 rounded-r-md py-4 text-sm font-medium"
-				title="Show filters"
-				aria-label="Show filters"
-				data-testid="mcpLibraryFilterSidebar-toggle-show"
-			>
-				<PanelLeftOpen className="text-muted-foreground group-hover:text-foreground size-4 transition-colors" />
-				<span className="rotate-180 select-none [writing-mode:vertical-rl]">Filters</span>
-				{activeFilterCount > 0 && (
-					<span className="bg-primary/10 text-primary flex size-6 items-center justify-center rounded-full text-xs font-medium">
-						{activeFilterCount}
-					</span>
-				)}
-			</button>
-		);
-	}
-
 	return (
-		<div className="bg-card flex h-full w-64 shrink-0 flex-col rounded-r-md">
-			<div className="flex h-11 items-center justify-between border-b pr-2 pl-5">
-				<span className="text-sm font-semibold">Filters</span>
-				<div className="flex items-center gap-1">
-					{activeFilterCount > 0 && (
-						<Button
-							variant="outline"
-							size="sm"
-							className="text-muted-foreground h-7 px-2 text-xs"
-							onClick={handleReset}
-							data-testid="mcpLibraryFilterSidebar-reset-button"
-						>
-							<RotateCcw className="size-3" />
-							Reset
-						</Button>
-					)}
-					<Button
-						variant="ghost"
-						size="icon"
-						className="size-7"
-						onClick={toggleCollapsed}
-						title="Hide filters"
-						aria-label="Hide filters"
-						data-testid="mcpLibraryFilterSidebar-toggle-hide"
-					>
-						<PanelLeftClose className="size-4" />
-					</Button>
-				</div>
-			</div>
-
+		<FilterSidebarChrome
+			collapsed={collapsed}
+			toggleCollapsed={toggleCollapsed}
+			isMobile={isMobile}
+			activeFilterCount={activeFilterCount}
+			onReset={handleReset}
+			testIdPrefix="mcpLibraryFilterSidebar"
+		>
 			<ScrollArea className="flex flex-1 overflow-y-auto p-2 pb-0" viewportClassName="no-table">
 				{isError ? (
 					<div className="flex flex-col items-center gap-3 px-3 py-8 text-center" data-testid="mcpLibraryFilterSidebar-error">
@@ -166,7 +108,7 @@ export function MCPLibraryFilterSidebar({ filters, onFiltersChange }: SidebarPro
 					</div>
 				)}
 			</ScrollArea>
-		</div>
+		</FilterSidebarChrome>
 	);
 }
 

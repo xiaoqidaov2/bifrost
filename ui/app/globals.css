@@ -311,12 +311,17 @@ div.content-container:has(.no-border-parent) {
 	}
 }
 
-/* Mobile: allow page content to scroll; avoid forced desktop min widths leaking out */
+/* Dual-pane pages: stack filter rail + main content on mobile */
 @media (max-width: 767px) {
 	html,
 	body {
 		overflow-x: hidden;
 		max-width: 100vw;
+	}
+
+	/* Wide tables scroll inside their container instead of blowing page width */
+	table {
+		max-width: 100%;
 	}
 }
 

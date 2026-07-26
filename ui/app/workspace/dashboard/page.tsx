@@ -427,18 +427,18 @@ export default function DashboardPage() {
 	const activeTab = urlState.tab || "overview";
 
 	return (
-		<div id="dashboard-root" className="no-padding-parent no-border-parent bg-background flex h-[calc(100vh_-_16px)] w-full gap-3">
+		<div id="dashboard-root" className="no-padding-parent no-border-parent bg-background flex h-[calc(100dvh-1rem)] min-h-0 w-full flex-col gap-2 md:h-[calc(100vh_-_16px)] md:flex-row md:gap-3">
 			{/* Sidebar Filters */}
 			<LogsFilterSidebar filters={filters} onFiltersChange={setFilters} />
 
 			{/* Main Content */}
-			<ScrollArea className="bg-card flex min-w-0 flex-1 flex-col gap-4 rounded-l-md" viewportClassName="no-table">
+			<ScrollArea className="bg-card flex min-h-0 min-w-0 flex-1 flex-col gap-4 rounded-md md:rounded-l-md" viewportClassName="no-table">
 				{/* Header */}
-				<div className="flex items-center justify-between p-4">
+				<div className="flex flex-col gap-2 p-3 sm:flex-row sm:items-center sm:justify-between sm:p-4">
 					<div className="flex items-center gap-2">
 						<h1 className="text-lg font-semibold">Dashboard</h1>
 					</div>
-					<div className="flex items-center gap-2">
+					<div className="flex flex-wrap items-center gap-2">
 						<ExportPopover
 							getData={getDashboardData}
 							onPreloadData={handlePreloadData}

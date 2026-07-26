@@ -615,16 +615,16 @@ export default function LogsPage() {
 	);
 
 	return (
-		<div className="dark:bg-card no-padding-parent no-border-parent h-[calc(100vh_-_16px)]">
+		<div className="dark:bg-card no-padding-parent no-border-parent flex h-[calc(100dvh-1rem)] min-h-0 flex-col md:h-[calc(100vh_-_16px)]">
 			{showEmptyState ? (
 				<EmptyState error={error ?? (logsError ? getErrorMessage(logsError as Parameters<typeof getErrorMessage>[0]) : null)} />
 			) : (
-				<div className="bg-background flex h-full w-full grow gap-3">
+				<div className="bg-background flex h-full min-h-0 w-full grow flex-col gap-2 md:flex-row md:gap-3">
 					{/* Sidebar Filters */}
 					<LogsFilterSidebar filters={filters} onFiltersChange={setFilters} />
 
 					{/* Main Content */}
-					<div className="bg-card flex min-w-0 flex-1 flex-col gap-2 overflow-hidden rounded-l-md p-4 pb-2">
+					<div className="bg-card flex min-h-0 min-w-0 flex-1 flex-col gap-2 overflow-hidden rounded-md p-3 pb-2 md:rounded-l-md md:p-4">
 						<div className="shrink-0">
 							<LogsHeaderView
 								filters={filters}

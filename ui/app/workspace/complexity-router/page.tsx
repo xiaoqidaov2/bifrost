@@ -335,12 +335,12 @@ export default function ComplexityRouterPage() {
 	const hasErrors = Boolean(boundaryErrors || keywordErrors);
 
 	return (
-		<ScrollArea className="no-padding-parent h-[calc(100vh_-_16px)] w-full px-14 pt-4">
-			<form className="mx-auto w-full max-w-7xl space-y-8" onSubmit={handleSubmit(onValid)} noValidate>
+		<ScrollArea className="no-padding-parent h-[calc(100dvh-1rem)] w-full min-w-0 px-3 pt-3 sm:px-6 sm:pt-4 md:h-[calc(100vh_-_16px)] md:px-14 md:pt-4">
+			<form className="mx-auto w-full max-w-7xl space-y-6 pb-24 sm:space-y-8" onSubmit={handleSubmit(onValid)} noValidate>
 				{/* ── Page header ── */}
 				<div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
 					<div className="space-y-1.5">
-						<h1 className="text-2xl font-semibold tracking-tight">Complexity Router</h1>
+						<h1 className="text-xl font-semibold tracking-tight sm:text-2xl">Complexity Router</h1>
 						<p className="text-muted-foreground max-w-2xl text-sm leading-relaxed">
 							Tune how incoming requests are classified into four tiers. Thresholds and keyword lists feed the{" "}
 							<code className="bg-muted rounded-sm px-1 py-0.5 font-mono text-xs">complexity_tier</code> field that routing rules can
@@ -356,10 +356,10 @@ export default function ComplexityRouterPage() {
 				</div>
 
 				{/* ── Complexity Spectrum ── */}
-				<div className="bg-card space-y-4 rounded-sm border p-5">
-					<div className="flex items-center justify-between">
+				<div className="bg-card space-y-4 rounded-sm border p-3 sm:p-5">
+					<div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
 						<p className="text-muted-foreground font-mono text-xs font-semibold tracking-widest uppercase">Complexity Spectrum</p>
-						<div className="flex items-center gap-4">
+						<div className="flex flex-wrap items-center gap-3 sm:gap-4">
 							{Object.values(TIER_PALETTE).map(({ color, name }) => (
 								<div key={name} className="flex items-center gap-1.5">
 									<div className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: color }} />
@@ -521,7 +521,7 @@ export default function ComplexityRouterPage() {
 				)}
 
 				{/* ── Action footer ── */}
-				<div className="bg-card sticky bottom-0 flex flex-wrap items-center justify-end gap-2.5 border-t py-4 z-10">
+				<div className="bg-card sticky bottom-0 z-10 flex flex-wrap items-center justify-end gap-2.5 border-t px-1 py-3 sm:py-4">
 					<Button
 						data-testid="complexity-router-restore-defaults-button"
 						type="button"
