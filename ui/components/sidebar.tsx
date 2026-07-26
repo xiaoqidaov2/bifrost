@@ -70,6 +70,7 @@ import {
 } from "@/components/ui/sidebar";
 import { useWebSocket } from "@/hooks/useWebSocket";
 import { IS_ENTERPRISE } from "@/lib/constants/config";
+import { t } from "@/lib/i18n";
 import { useGetCoreConfigQuery, useGetLatestReleaseQuery, useGetVersionQuery, useLogoutMutation } from "@/lib/store";
 import { RbacOperation, RbacResource, useRbac } from "@enterprise/lib";
 import type { UserInfo } from "@enterprise/lib/store/utils/tokenManager";
@@ -293,7 +294,7 @@ const SidebarItemView = ({
 			<div className="flex w-full items-center gap-2">
 				<item.icon className={`h-4 w-4 shrink-0 ${isActive || isAnySubItemActive ? "text-primary" : "text-muted-foreground"}`} />
 				<span className={`text-sm group-data-[collapsible=icon]:hidden ${isActive || isAnySubItemActive ? "font-medium" : "font-normal"}`}>
-					{item.title}
+					{t(item.title)}
 				</span>
 				{item.new && (
 					<Badge data-new-badge="true" className={cn("ml-auto group-data-[collapsible=icon]:hidden", newBadgeClassName)}>
@@ -327,7 +328,7 @@ const SidebarItemView = ({
 	if (hasSubItems) {
 		menuButton = (
 			<SidebarMenuButton
-				tooltip={isSidebarCollapsed ? undefined : item.title}
+				tooltip={isSidebarCollapsed ? undefined : t(item.title)}
 				className={buttonClassName}
 				onClick={handleClick}
 				data-testid={`sidebar-item-btn-${slug(item.title)}`}
@@ -337,13 +338,13 @@ const SidebarItemView = ({
 		);
 	} else if (!item.hasAccess) {
 		menuButton = (
-			<SidebarMenuButton tooltip={item.title} data-nav-url={item.url} className={buttonClassName}>
+			<SidebarMenuButton tooltip={t(item.title)} data-nav-url={item.url} className={buttonClassName}>
 				{innerContent}
 			</SidebarMenuButton>
 		);
 	} else if (isExternal) {
 		menuButton = (
-			<SidebarMenuButton asChild tooltip={item.title} className={buttonClassName}>
+			<SidebarMenuButton asChild tooltip={t(item.title)} className={buttonClassName}>
 				<a
 					href={item.url}
 					target="_blank"
@@ -357,7 +358,7 @@ const SidebarItemView = ({
 		);
 	} else {
 		menuButton = (
-			<SidebarMenuButton asChild tooltip={item.title} className={buttonClassName}>
+			<SidebarMenuButton asChild tooltip={t(item.title)} className={buttonClassName}>
 				<Link
 					to={item.url as any}
 					preload="intent"
@@ -371,7 +372,7 @@ const SidebarItemView = ({
 	}
 
 	return (
-		<SidebarMenuItem key={item.title}>
+		<SidebarMenuItem key={t(item.title)}>
 			{isSidebarCollapsed && hasSubItems ? (
 				<Popover open={flyoutOpen} onOpenChange={setFlyoutOpen}>
 					<PopoverTrigger asChild onMouseEnter={openFlyout} onMouseLeave={closeFlyout}>
@@ -386,7 +387,7 @@ const SidebarItemView = ({
 						onMouseLeave={closeFlyout}
 						data-testid={`sidebar-flyout-content-${slug(item.title)}`}
 					>
-						<div className="text-muted-foreground px-2 py-1.5 text-xs font-medium">{item.title}</div>
+						<div className="text-muted-foreground px-2 py-1.5 text-xs font-medium">{t(item.title)}</div>
 						{item.subItems?.map((subItem) => {
 							const baseHref = getSidebarItemHref(subItem);
 							const href = preserveTimeFilters(baseHref, subItem.url, pathname, search);
@@ -397,7 +398,7 @@ const SidebarItemView = ({
 								<div className="flex items-center gap-2">
 									{SubItemIcon && <SubItemIcon className={`h-3.5 w-3.5 ${isSubItemActive ? "text-primary" : "text-muted-foreground"}`} />}
 									<span className={`text-sm ${isSubItemActive ? "text-primary font-medium" : "text-slate-500 dark:text-zinc-400"}`}>
-										{subItem.title}
+										{t(subItem.title)}
 									</span>
 									{subItem.new && (
 										<Badge data-new-badge="true" className={cn("ml-auto", newBadgeClassName)}>
@@ -412,7 +413,7 @@ const SidebarItemView = ({
 								</div>
 							);
 							return (
-								<div key={subItem.title} data-testid={`sidebar-flyout-subitem-${subSlug}`} onClick={() => setFlyoutOpen(false)}>
+								<div key={t(subItem.title)} data-testid={`sidebar-flyout-subitem-${subSlug}`} onClick={() => setFlyoutOpen(false)}>
 									{subItem.hasAccess === false ? (
 										<div
 											data-testid={`sidebar-subitem-disabled-${subSlug}`}
@@ -458,7 +459,7 @@ const SidebarItemView = ({
 						const subInner = (
 							<div className="flex w-full items-center gap-2">
 								{SubItemIcon && <SubItemIcon className={`h-3.5 w-3.5 ${isSubItemActive ? "text-primary" : "text-muted-foreground"}`} />}
-								<span className={`text-sm ${isSubItemActive ? "font-medium" : "font-normal"}`}>{subItem.title}</span>
+								<span className={`text-sm ${isSubItemActive ? "font-medium" : "font-normal"}`}>{t(subItem.title)}</span>
 								{subItem.new && (
 									<Badge data-new-badge="true" className={cn("ml-auto", newBadgeClassName)}>
 										New
@@ -472,7 +473,7 @@ const SidebarItemView = ({
 							</div>
 						);
 						return (
-							<SidebarMenuSubItem key={subItem.title}>
+							<SidebarMenuSubItem key={t(subItem.title)}>
 								{subItem.hasAccess === false ? (
 									<SidebarMenuSubButton
 										data-nav-url={subItemHref}
@@ -1455,7 +1456,7 @@ export default function AppSidebar() {
 								const highlightedUrl = focusedIndex >= 0 ? navigableItems[focusedIndex]?.url : undefined;
 								return (
 									<SidebarItemView
-										key={item.title}
+										key={t(item.title)}
 										item={item}
 										isActive={isActive}
 										isExternal={item.isExternal ?? false}
@@ -1487,7 +1488,7 @@ export default function AppSidebar() {
 										target="_blank"
 										rel="noopener noreferrer"
 										className="group flex w-full items-center justify-between"
-										title={item.title}
+										title={t(item.title)}
 									>
 										<div className="flex items-center space-x-3">
 											<item.icon

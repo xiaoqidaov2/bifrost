@@ -1,6 +1,7 @@
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { t } from "@/lib/i18n";
 import { getErrorMessage, useLoginMutation } from "@/lib/store/apis";
 import { BooksIcon, DiscordLogoIcon, GithubLogoIcon } from "@phosphor-icons/react";
 import { useNavigate } from "@tanstack/react-router";
@@ -69,8 +70,8 @@ export default function LoginView() {
 					</div>
 
 					<div className="space-y-2 text-center">
-						<h1 className="text-foreground text-lg font-semibold">Welcome back</h1>
-						<p className="text-muted-foreground text-sm">Sign in to your account to continue</p>
+						<h1 className="text-foreground text-lg font-semibold">{t("Welcome back")}</h1>
+						<p className="text-muted-foreground text-sm">{t("Sign in to your account to continue")}</p>
 					</div>
 
 					<form onSubmit={handleSubmit} className="space-y-5">
@@ -78,12 +79,12 @@ export default function LoginView() {
 
 						<div className="space-y-2">
 							<Label htmlFor="username" className="text-sm font-medium">
-								Username
+								{t("Username")}
 							</Label>
 							<Input
 								id="username"
 								type="text"
-								placeholder="Enter your username"
+								placeholder={t("Enter your username")}
 								value={username}
 								onChange={(e) => setUsername(e.target.value)}
 								required
@@ -94,13 +95,13 @@ export default function LoginView() {
 
 						<div className="space-y-2">
 							<Label htmlFor="password" className="text-sm font-medium">
-								Password
+								{t("Password")}
 							</Label>
 							<div className="relative">
 								<Input
 									id="password"
 									type={showPassword ? "text" : "password"}
-									placeholder="Enter your password"
+									placeholder={t("Enter your password")}
 									value={password}
 									onChange={(e) => setPassword(e.target.value)}
 									required
@@ -111,7 +112,7 @@ export default function LoginView() {
 									type="button"
 									onClick={() => setShowPassword(!showPassword)}
 									className="text-muted-foreground hover:text-foreground absolute top-1/2 right-3 -translate-y-1/2 transition-colors"
-									aria-label={showPassword ? "Hide password" : "Show password"}
+									aria-label={showPassword ? t("Hide password") : t("Show password")}
 								>
 									{showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
 								</button>
@@ -119,7 +120,7 @@ export default function LoginView() {
 						</div>
 
 						<Button type="submit" className="h-9 w-full text-sm" isLoading={isLoading} disabled={isLoading}>
-							{isLoading || isLoggingIn ? "Signing in..." : "Sign in"}
+							{isLoading || isLoggingIn ? t("Logging in...") : t("Sign in")}
 						</Button>
 					</form>
 
@@ -132,7 +133,7 @@ export default function LoginView() {
 								target="_blank"
 								rel="noopener noreferrer"
 								className="text-muted-foreground hover:text-primary transition-colors"
-								title={item.title}
+								title={t(item.title)}
 							>
 								<item.icon className="h-5 w-5" size={20} weight="regular" strokeWidth={item.strokeWidth} />
 							</a>

@@ -1,3 +1,4 @@
+import ChineseOverlay from "@/components/chineseOverlay";
 import FullPageLoader from "@/components/fullPageLoader";
 import NotAvailableBanner from "@/components/notAvailableBanner";
 import ProgressProvider from "@/components/progressBar";
@@ -152,6 +153,7 @@ export function ClientLayout({ children }: { children: React.ReactNode }) {
 		<ProgressProvider>
 			<ThemeProvider attribute="class" defaultTheme="system" enableSystem>
 				<Toaster closeButton />
+				<ChineseOverlay />
 				<ReduxProvider>
 					<NuqsAdapter>
 						<RbacProvider>
