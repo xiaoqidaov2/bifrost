@@ -300,8 +300,24 @@ div.content-container:has(.no-border-parent) {
 /* // trial-notification-banner style*/
 
 #trial-notification-banner {
-	width: calc(100% + 80px);
-	margin-left: -40px;
+	width: 100%;
+	margin-left: 0;
+}
+
+@media (min-width: 768px) {
+	#trial-notification-banner {
+		width: calc(100% + 80px);
+		margin-left: -40px;
+	}
+}
+
+/* Mobile: allow page content to scroll; avoid forced desktop min widths leaking out */
+@media (max-width: 767px) {
+	html,
+	body {
+		overflow-x: hidden;
+		max-width: 100vw;
+	}
 }
 
 div.content-container:has(.no-padding-parent) #trial-notification-banner {

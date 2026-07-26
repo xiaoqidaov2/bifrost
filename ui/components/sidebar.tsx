@@ -216,6 +216,7 @@ const SidebarItemView = ({
 	isSidebarCollapsed,
 	expandSidebar,
 	highlightedUrl,
+	onNavigate,
 }: {
 	item: SidebarItem;
 	isActive: boolean;
@@ -228,6 +229,8 @@ const SidebarItemView = ({
 	isSidebarCollapsed: boolean;
 	expandSidebar: () => void;
 	highlightedUrl?: string;
+	/** Close mobile drawer after leaf navigation */
+	onNavigate?: () => void;
 }) => {
 	const [flyoutOpen, setFlyoutOpen] = useState(false);
 	const flyoutCloseTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -363,7 +366,10 @@ const SidebarItemView = ({
 					to={item.url as any}
 					preload="intent"
 					data-nav-url={item.url}
-					onClick={isSidebarCollapsed ? (e: React.MouseEvent) => e.stopPropagation() : undefined}
+					onClick={(e: React.MouseEvent) => {
+						if (isSidebarCollapsed) e.stopPropagation();
+						onNavigate?.();
+					}}
 				>
 					{innerContent}
 				</Link>
@@ -413,26 +419,27 @@ const SidebarItemView = ({
 								</div>
 							);
 							return (
-								<div key={t(subItem.title)} data-testid={`sidebar-flyout-subitem-${subSlug}`} onClick={() => setFlyoutOpen(false)}>
-									{subItem.hasAccess === false ? (
-										<div
-											data-testid={`sidebar-subitem-disabled-${subSlug}`}
-											className="text-muted-foreground hover:bg-destructive/5 flex h-7 cursor-not-allowed items-center rounded-sm px-2"
-										>
-											{inner}
-										</div>
-									) : (
-										<Link
-											to={href as any}
-											preload="intent"
-											data-testid={`sidebar-subitem-link-${subSlug}`}
-											className={`flex h-7 items-center rounded-sm px-2 ${isSubItemActive ? "bg-sidebar-accent" : "hover:bg-sidebar-accent"}`}
-										>
-											{inner}
-										</Link>
-									)}
-								</div>
-							);
+													<div key={t(subItem.title)} data-testid={`sidebar-flyout-subitem-${subSlug}`} onClick={() => setFlyoutOpen(false)}>
+														{subItem.hasAccess === false ? (
+															<div
+																data-testid={`sidebar-subitem-disabled-${subSlug}`}
+																className="text-muted-foreground hover:bg-destructive/5 flex h-7 cursor-not-allowed items-center rounded-sm px-2"
+															>
+																{inner}
+															</div>
+														) : (
+															<Link
+																to={href as any}
+																preload="intent"
+																data-testid={`sidebar-subitem-link-${subSlug}`}
+																className={`flex h-7 items-center rounded-sm px-2 ${isSubItemActive ? "bg-sidebar-accent" : "hover:bg-sidebar-accent"}`}
+																onClick={() => onNavigate?.()}
+															>
+																{inner}
+															</Link>
+														)}
+													</div>
+												);
 						})}
 					</PopoverContent>
 				</Popover>
@@ -489,6 +496,7 @@ const SidebarItemView = ({
 											preload="intent"
 											data-nav-url={subItemHref}
 											data-testid={`sidebar-subitem-link-${slug(subItem.title)}`}
+											onClick={() => onNavigate?.()}
 										>
 											{subInner}
 										</Link>
@@ -1379,14 +1387,17 @@ export default function AppSidebar() {
 		}
 	};
 
-	const { state: sidebarState, toggleSidebar } = useSidebar();
+	const { state: sidebarState, toggleSidebar, isMobile, setOpenMobile } = useSidebar();
+	const closeMobileNav = useCallback(() => {
+		if (isMobile) setOpenMobile(false);
+	}, [isMobile, setOpenMobile]);
 
 	return (
 		<Sidebar collapsible="icon" className="overflow-y-clip border-none bg-transparent">
 			<SidebarHeader className="mt-1 ml-2 flex justify-between px-0 group-data-[collapsible=icon]:ml-0 group-data-[collapsible=icon]:h-auto">
 				{/* Expanded state: horizontal layout */}
 				<div className="flex h-10 w-full items-center justify-between px-1.5 group-data-[collapsible=icon]:hidden">
-					<Link to="/workspace/logs" className="group flex items-center gap-2 pl-2">
+					<Link to="/workspace/logs" className="group flex items-center gap-2 pl-2" onClick={closeMobileNav}>
 						<img className="h-[22px] w-auto" src={logoSrc} alt="Bifrost" width={70} height={70} />
 					</Link>
 					<button
@@ -1394,7 +1405,7 @@ export default function AppSidebar() {
 						type="button"
 						data-testid="sidebar-collapse-btn"
 						className="text-muted-foreground hover:text-foreground hover:bg-sidebar-accent flex h-7 w-7 items-center justify-center rounded-md transition-colors"
-						aria-label="Collapse sidebar"
+						aria-label={isMobile ? "关闭菜单" : "Collapse sidebar"}
 					>
 						<PanelLeftClose className="h-4 w-4" />
 					</button>
@@ -1455,21 +1466,22 @@ export default function AppSidebar() {
 
 								const highlightedUrl = focusedIndex >= 0 ? navigableItems[focusedIndex]?.url : undefined;
 								return (
-									<SidebarItemView
-										key={t(item.title)}
-										item={item}
-										isActive={isActive}
-										isExternal={item.isExternal ?? false}
-										isWebSocketConnected={isWebSocketConnected}
-										isExpanded={expandedItems.has(item.title)}
-										onToggle={() => toggleItem(item.title)}
-										pathname={pathname}
-										search={search}
-										isSidebarCollapsed={sidebarState === "collapsed"}
-										expandSidebar={() => toggleSidebar()}
-										highlightedUrl={highlightedUrl}
-									/>
-								);
+																<SidebarItemView
+																	key={t(item.title)}
+																	item={item}
+																	isActive={isActive}
+																	isExternal={item.isExternal ?? false}
+																	isWebSocketConnected={isWebSocketConnected}
+																	isExpanded={expandedItems.has(item.title)}
+																	onToggle={() => toggleItem(item.title)}
+																	pathname={pathname}
+																	search={search}
+																	isSidebarCollapsed={sidebarState === "collapsed"}
+																	expandSidebar={() => toggleSidebar()}
+																	highlightedUrl={highlightedUrl}
+																	onNavigate={closeMobileNav}
+																/>
+															);
 							})}
 						</SidebarMenu>
 					</SidebarGroupContent>

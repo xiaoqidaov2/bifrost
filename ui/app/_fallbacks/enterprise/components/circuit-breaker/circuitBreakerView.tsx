@@ -327,15 +327,16 @@ export default function CircuitBreakerView() {
 	const saving = creating || updating;
 
 	return (
-		<div className="mx-auto flex h-full w-full max-w-6xl flex-col gap-6 p-6" data-testid="circuit-breaker-page">
-			<div className="flex items-start justify-between gap-4">
+		<div className="mx-auto flex h-full w-full max-w-6xl flex-col gap-4 p-3 sm:gap-6 sm:p-6" data-testid="circuit-breaker-page">
+			<div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
 				<div className="flex items-start gap-3">
-					<CircuitBoard className="text-primary mt-1 h-8 w-8" strokeWidth={1.5} />
-					<div>
-						<h1 className="text-xl font-semibold">熔断器</h1>
-						<p className="text-muted-foreground mt-1 max-w-2xl text-sm">
+					<CircuitBoard className="text-primary mt-1 h-7 w-7 shrink-0 sm:h-8 sm:w-8" strokeWidth={1.5} />
+					<div className="min-w-0">
+						<h1 className="text-lg font-semibold sm:text-xl">熔断器</h1>
+						<p className="text-muted-foreground mt-1 max-w-2xl text-xs sm:text-sm">
 							一句话：主线路老失败 → 自动换备用 → 过一会儿再试主线路。
-							<br />
+							<br className="hidden sm:block" />
+							<span className="sm:hidden"> </span>
 							绿色「正常」= 还在走主线路（不是坏了）。红色「已切备用」= 已经切到备用了。
 						</p>
 					</div>
@@ -344,6 +345,7 @@ export default function CircuitBreakerView() {
 					<Button
 						variant="outline"
 						size="sm"
+						className="flex-1 sm:flex-none"
 						onClick={() => {
 							refetchPolicies();
 							refetchState();
@@ -352,7 +354,7 @@ export default function CircuitBreakerView() {
 						<RefreshCw className="mr-2 h-4 w-4" />
 						刷新
 					</Button>
-					<Button size="sm" onClick={openCreate} data-testid="circuit-breaker-create-open">
+					<Button size="sm" className="flex-1 sm:flex-none" onClick={openCreate} data-testid="circuit-breaker-create-open">
 						<Plus className="mr-2 h-4 w-4" />
 						新建规则
 					</Button>
@@ -387,7 +389,7 @@ export default function CircuitBreakerView() {
 							return (
 								<li
 									key={p.name}
-									className="hover:bg-muted/30 flex flex-col gap-3 px-4 py-4 sm:flex-row sm:items-center sm:justify-between"
+									className="hover:bg-muted/30 flex flex-col gap-3 px-3 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-4 sm:py-4"
 									data-testid={`circuit-breaker-policy-${p.name}`}
 								>
 									<button type="button" className="min-w-0 flex-1 text-left" onClick={() => openEdit(p)}>
@@ -436,10 +438,11 @@ export default function CircuitBreakerView() {
 											</div>
 										)}
 									</button>
-									<div className="flex shrink-0 gap-2">
+									<div className="flex w-full shrink-0 flex-wrap gap-2 sm:w-auto">
 										<Button
 											variant="outline"
 											size="sm"
+											className="flex-1 sm:flex-none"
 											onClick={async () => {
 												await resetPolicy(p.name);
 												refetchState();
@@ -449,12 +452,13 @@ export default function CircuitBreakerView() {
 											<RotateCcw className="mr-1 h-3.5 w-3.5" />
 											恢复主线路
 										</Button>
-										<Button variant="outline" size="sm" onClick={() => openEdit(p)}>
+										<Button variant="outline" size="sm" className="flex-1 sm:flex-none" onClick={() => openEdit(p)}>
 											修改
 										</Button>
 										<Button
 											variant="destructive"
 											size="sm"
+											className="sm:flex-none"
 											onClick={async () => {
 												await deletePolicy(p.name);
 												refetchPolicies();
@@ -473,7 +477,7 @@ export default function CircuitBreakerView() {
 			</div>
 
 			<Sheet open={sheetOpen} onOpenChange={setSheetOpen}>
-				<SheetContent className="flex w-full flex-col gap-0 overflow-y-auto sm:max-w-xl" side="right">
+				<SheetContent className="flex w-full flex-col gap-0 overflow-y-auto p-0 sm:max-w-xl" side="right">
 					<SheetHeader className="border-b px-6 py-4 text-left">
 						<SheetTitle>{editing ? `修改 · ${editing.name}` : "新建切换规则"}</SheetTitle>
 						<SheetDescription>

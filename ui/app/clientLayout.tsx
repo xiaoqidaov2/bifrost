@@ -1,5 +1,6 @@
 import ChineseOverlay from "@/components/chineseOverlay";
 import FullPageLoader from "@/components/fullPageLoader";
+import MobileTopBar from "@/components/mobileTopBar";
 import NotAvailableBanner from "@/components/notAvailableBanner";
 import ProgressProvider from "@/components/progressBar";
 import Sidebar from "@/components/sidebar";
@@ -109,11 +110,13 @@ function AppContent({ children }: { children: React.ReactNode }) {
 		<WebSocketProvider>
 			<CookiesProvider>
 				<StoreSyncInitializer />
-				<SidebarProvider>
+				<SidebarProvider className="min-h-svh w-full overflow-x-hidden">
 					<Sidebar />
-					<div className="dark:bg-card custom-scrollbar content-container my-[0.5rem] mr-[0.5rem] h-[calc(100dvh-1rem)] w-full min-w-xl overflow-auto rounded-md border border-gray-200 bg-white px-10 dark:border-zinc-800">
+					{/* Main content: no min-w-xl on mobile — that forced PC-only horizontal scroll */}
+					<div className="dark:bg-card custom-scrollbar content-container relative my-0 mr-0 h-dvh w-full min-w-0 flex-1 overflow-auto rounded-none border-0 border-gray-200 bg-white px-0 md:my-[0.5rem] md:mr-[0.5rem] md:h-[calc(100dvh-1rem)] md:rounded-md md:border md:px-6 lg:px-10 dark:border-zinc-800">
+						<MobileTopBar />
 						<TrialExpiryBanner />
-						<main className="custom-scrollbar content-container-inner relative mx-auto flex h-full min-h-0 flex-col overflow-y-hidden p-4">
+						<main className="custom-scrollbar content-container-inner relative mx-auto flex h-full min-h-0 min-w-0 flex-col overflow-y-auto overflow-x-hidden p-3 sm:p-4 md:overflow-y-hidden">
 							{isLoading ? <FullPageLoader /> : <FullPage config={bifrostConfig}>{children}</FullPage>}
 						</main>
 					</div>
@@ -129,8 +132,8 @@ function AppContent({ children }: { children: React.ReactNode }) {
 // like the MCP per-user OAuth auth page.
 function MinimalShell({ children }: { children: React.ReactNode }) {
 	return (
-		<div className="dark:bg-card custom-scrollbar content-container my-[0.5rem] h-[calc(100dvh-1rem)] w-full overflow-auto rounded-md border border-gray-200 bg-white px-10 dark:border-zinc-800">
-			<main className="custom-scrollbar content-container-inner relative mx-auto flex h-full min-h-0 flex-col overflow-y-hidden p-4">
+		<div className="dark:bg-card custom-scrollbar content-container my-0 h-dvh w-full min-w-0 overflow-auto rounded-none border-0 border-gray-200 bg-white px-3 sm:px-6 md:my-[0.5rem] md:h-[calc(100dvh-1rem)] md:rounded-md md:border md:px-10 dark:border-zinc-800">
+			<main className="custom-scrollbar content-container-inner relative mx-auto flex h-full min-h-0 min-w-0 flex-col overflow-y-auto p-3 sm:p-4 md:overflow-y-hidden">
 				{children}
 			</main>
 		</div>
