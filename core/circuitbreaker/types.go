@@ -34,7 +34,11 @@ type Policy struct {
 	Name            string `json:"name"`
 	Enabled         bool   `json:"enabled"`
 	PrimaryProvider string `json:"primary_provider"`
-	PrimaryModel    string `json:"primary_model"`
+	// PrimaryModel is the legacy single primary model (mirrored as PrimaryModels[0]).
+	PrimaryModel string `json:"primary_model,omitempty"`
+	// PrimaryModels lists all primary models this policy monitors (same provider + key/fallback chain).
+	// Prefer this over repeating one policy per model.
+	PrimaryModels []string `json:"primary_models,omitempty"`
 	// PrimaryKeyIDs optionally scopes the policy to specific provider API keys.
 	// Empty = one shared circuit for all keys serving primary_provider+primary_model.
 	// Non-empty = per-key sub-circuits; sticky fallback chain applies only when
@@ -78,7 +82,8 @@ type PolicyStateView struct {
 	Enabled          bool              `json:"enabled"`
 	State            State             `json:"state"`
 	PrimaryProvider  string            `json:"primary_provider"`
-	PrimaryModel     string            `json:"primary_model"`
+	PrimaryModel     string            `json:"primary_model,omitempty"`
+	PrimaryModels    []string          `json:"primary_models,omitempty"`
 	PrimaryKeyIDs    []string          `json:"primary_key_ids,omitempty"`
 	Fallbacks        []FallbackHop     `json:"fallbacks,omitempty"`
 	FallbackProvider string            `json:"fallback_provider,omitempty"`
@@ -111,7 +116,8 @@ type FilePolicy struct {
 	Name             string        `json:"name"`
 	Enabled          *bool         `json:"enabled,omitempty"`
 	PrimaryProvider  string        `json:"primary_provider"`
-	PrimaryModel     string        `json:"primary_model"`
+	PrimaryModel     string        `json:"primary_model,omitempty"`
+	PrimaryModels    []string      `json:"primary_models,omitempty"`
 	PrimaryKeyIDs    []string      `json:"primary_key_ids,omitempty"`
 	Fallbacks        []FallbackHop `json:"fallbacks,omitempty"`
 	FallbackProvider string        `json:"fallback_provider,omitempty"`

@@ -150,6 +150,7 @@ func (e *Engine) SnapshotState() []PolicyStateView {
 			Enabled:          p.Enabled,
 			PrimaryProvider:  p.PrimaryProvider,
 			PrimaryModel:     p.PrimaryModel,
+			PrimaryModels:    append([]string(nil), p.PrimaryModels...),
 			PrimaryKeyIDs:    append([]string(nil), p.PrimaryKeyIDs...),
 			Fallbacks:        hops,
 			FallbackProvider: firstHopProvider(hops, p),
@@ -248,7 +249,7 @@ func (e *Engine) ApplyIfOpen(ctx *schemas.BifrostContext, req *schemas.BifrostRe
 		if !p.Enabled {
 			continue
 		}
-		if !providerModelMatch(p.PrimaryProvider, p.PrimaryModel, string(provider), model) {
+		if !policyMatchesPrimary(p, string(provider), model) {
 			continue
 		}
 		if !primaryKeyMatches(p, selectedKey) {
@@ -334,7 +335,7 @@ func (e *Engine) ObserveAttempt(ctx *schemas.BifrostContext, req *schemas.Bifros
 		if !p.Enabled {
 			continue
 		}
-		if !providerModelMatch(p.PrimaryProvider, p.PrimaryModel, string(provider), model) {
+		if !policyMatchesPrimary(p, string(provider), model) {
 			continue
 		}
 		if !primaryKeyMatches(p, selectedKey) {
@@ -461,7 +462,7 @@ func (e *Engine) ApplyPeerKeyPin(ctx *schemas.BifrostContext, req *schemas.Bifro
 		if !p.Enabled || len(p.PrimaryKeyIDs) == 0 {
 			continue
 		}
-		if !providerModelMatch(p.PrimaryProvider, p.PrimaryModel, string(provider), model) {
+		if !policyMatchesPrimary(p, string(provider), model) {
 			continue
 		}
 		if selectedKey == "" || !containsFold(p.PrimaryKeyIDs, selectedKey) {
@@ -569,9 +570,32 @@ func normalizePolicy(p Policy) (Policy, error) {
 	if p.Name == "" {
 		return p, fmt.Errorf("circuit breaker policy name is required")
 	}
-	if p.PrimaryProvider == "" || p.PrimaryModel == "" {
-		return p, fmt.Errorf("policy %q: primary_provider and primary_model are required", p.Name)
+	if p.PrimaryProvider == "" {
+		return p, fmt.Errorf("policy %q: primary_provider is required", p.Name)
 	}
+	// Merge primary_models + legacy primary_model
+	models := make([]string, 0, len(p.PrimaryModels)+1)
+	seenM := map[string]struct{}{}
+	addModel := func(m string) {
+		m = strings.TrimSpace(m)
+		if m == "" {
+			return
+		}
+		if _, ok := seenM[m]; ok {
+			return
+		}
+		seenM[m] = struct{}{}
+		models = append(models, m)
+	}
+	for _, m := range p.PrimaryModels {
+		addModel(m)
+	}
+	addModel(p.PrimaryModel)
+	if len(models) == 0 {
+		return p, fmt.Errorf("policy %q: at least one primary model is required (primary_models or primary_model)", p.Name)
+	}
+	p.PrimaryModels = models
+	p.PrimaryModel = models[0]
 	// Normalize key ids
 	if len(p.PrimaryKeyIDs) > 0 {
 		clean := make([]string, 0, len(p.PrimaryKeyIDs))
@@ -639,6 +663,7 @@ func ParseFileConfig(fc *FileConfig) ([]Policy, error) {
 			Name:             fp.Name,
 			PrimaryProvider:  fp.PrimaryProvider,
 			PrimaryModel:     fp.PrimaryModel,
+			PrimaryModels:    fp.PrimaryModels,
 			PrimaryKeyIDs:    fp.PrimaryKeyIDs,
 			Fallbacks:        fp.Fallbacks,
 			FallbackProvider: fp.FallbackProvider,
@@ -751,6 +776,23 @@ func containsFold(list []string, want string) bool {
 
 func providerModelMatch(wantProv, wantModel, gotProv, gotModel string) bool {
 	return strings.EqualFold(wantProv, gotProv) && wantModel == gotModel
+}
+
+// policyMatchesPrimary matches provider + any configured primary model.
+func policyMatchesPrimary(p Policy, gotProv, gotModel string) bool {
+	if !strings.EqualFold(p.PrimaryProvider, gotProv) {
+		return false
+	}
+	models := p.PrimaryModels
+	if len(models) == 0 && p.PrimaryModel != "" {
+		models = []string{p.PrimaryModel}
+	}
+	for _, m := range models {
+		if m == gotModel {
+			return true
+		}
+	}
+	return false
 }
 
 func filterWindow(times []time.Time, now time.Time, window time.Duration) []time.Time {

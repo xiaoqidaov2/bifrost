@@ -50,7 +50,8 @@ type policyWire struct {
 	Name             string                    `json:"name"`
 	Enabled          *bool                     `json:"enabled,omitempty"`
 	PrimaryProvider  string                    `json:"primary_provider"`
-	PrimaryModel     string                    `json:"primary_model"`
+	PrimaryModel     string                    `json:"primary_model,omitempty"`
+	PrimaryModels    []string                  `json:"primary_models,omitempty"`
 	PrimaryKeyIDs    []string                  `json:"primary_key_ids,omitempty"`
 	Fallbacks        []circuitbreaker.FallbackHop `json:"fallbacks,omitempty"`
 	FallbackProvider string                    `json:"fallback_provider,omitempty"`
@@ -70,6 +71,7 @@ func policyToWire(p circuitbreaker.Policy) policyWire {
 		Enabled:          &en,
 		PrimaryProvider:  p.PrimaryProvider,
 		PrimaryModel:     p.PrimaryModel,
+		PrimaryModels:    p.PrimaryModels,
 		PrimaryKeyIDs:    p.PrimaryKeyIDs,
 		Fallbacks:        p.Fallbacks,
 		FallbackProvider: p.FallbackProvider,
@@ -88,6 +90,7 @@ func wireToPolicy(w policyWire) (circuitbreaker.Policy, error) {
 		Name:             w.Name,
 		PrimaryProvider:  w.PrimaryProvider,
 		PrimaryModel:     w.PrimaryModel,
+		PrimaryModels:    w.PrimaryModels,
 		PrimaryKeyIDs:    w.PrimaryKeyIDs,
 		Fallbacks:        w.Fallbacks,
 		FallbackProvider: w.FallbackProvider,

@@ -10,7 +10,8 @@ export interface CircuitBreakerPolicy {
 	name: string;
 	enabled?: boolean;
 	primary_provider: string;
-	primary_model: string;
+	primary_model?: string;
+	primary_models?: string[];
 	primary_key_ids?: string[];
 	fallbacks?: CircuitBreakerFallbackHop[];
 	/** @deprecated prefer fallbacks[] */
@@ -38,7 +39,8 @@ export interface CircuitBreakerStateView {
 	enabled: boolean;
 	state: "closed" | "open" | string;
 	primary_provider: string;
-	primary_model: string;
+	primary_model?: string;
+	primary_models?: string[];
 	primary_key_ids?: string[];
 	fallbacks?: CircuitBreakerFallbackHop[];
 	fallback_provider?: string;

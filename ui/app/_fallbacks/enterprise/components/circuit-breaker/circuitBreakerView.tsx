@@ -1,6 +1,6 @@
 /**
  * Circuit Breaker view — routing-rules style list + sheet editor.
- * Supports primary key scoping and multi-level fallback chains.
+ * Supports multi primary models, primary key scoping, multi-level fallbacks.
  */
 import { Button } from "@/components/ui/button";
 import { ComboboxSelect } from "@/components/ui/combobox";
@@ -39,7 +39,7 @@ type FormState = {
 	nameTouched: boolean;
 	enabled: boolean;
 	primary_provider: string;
-	primary_model: string;
+	primary_models: string[];
 	primary_key_ids: string[];
 	fallbacks: HopForm[];
 	default_cooldown: string;
@@ -52,7 +52,7 @@ const emptyForm = (): FormState => ({
 	nameTouched: false,
 	enabled: true,
 	primary_provider: "",
-	primary_model: "",
+	primary_models: [],
 	primary_key_ids: [],
 	fallbacks: [emptyHop()],
 	default_cooldown: "30s",
@@ -69,15 +69,22 @@ function slugPart(s: string) {
 		.slice(0, 32);
 }
 
-function autoName(primaryProv: string, primaryModel: string, hops: HopForm[]) {
+function autoName(primaryProv: string, primaryModels: string[], hops: HopForm[]) {
 	const a = slugPart(primaryProv);
-	const b = slugPart(primaryModel);
+	const b = slugPart(primaryModels[0] || "");
 	if (!a || !b) return "";
+	const multi = primaryModels.length > 1 ? `-${primaryModels.length}m` : "";
 	const last = hops.find((h) => h.provider && h.model) || hops[0];
 	if (last?.provider && last?.model) {
-		return `${a}-${b}-to-${slugPart(last.provider)}-${slugPart(last.model)}`.replace(/-+/g, "-");
+		return `${a}-${b}${multi}-to-${slugPart(last.provider)}-${slugPart(last.model)}`.replace(/-+/g, "-");
 	}
-	return `${a}-${b}-cb`;
+	return `${a}-${b}${multi}-cb`;
+}
+
+function primaryModelsOf(p: CircuitBreakerPolicy): string[] {
+	const ms = [...(p.primary_models || [])];
+	if (p.primary_model && !ms.includes(p.primary_model)) ms.unshift(p.primary_model);
+	return ms.filter(Boolean);
 }
 
 function hopsFromPolicy(p: CircuitBreakerPolicy): HopForm[] {
@@ -117,7 +124,10 @@ function stateBadge(state: string) {
 
 function chainLabel(p: CircuitBreakerPolicy) {
 	const hops = hopsFromPolicy(p).filter((h) => h.provider && h.model);
-	const head = `${p.primary_provider}/${p.primary_model}`;
+	const models = primaryModelsOf(p);
+	const head = models.length
+		? `${p.primary_provider}/{${models.join(",")}}`
+		: `${p.primary_provider}/${p.primary_model || "?"}`;
 	if (hops.length === 0) return head;
 	return [head, ...hops.map((h) => `${h.provider}/${h.model}`)].join(" → ");
 }
@@ -166,7 +176,6 @@ export default function CircuitBreakerView() {
 			}));
 	}, [allKeysData, form.primary_provider]);
 
-	// Prefill first provider
 	useEffect(() => {
 		if (sheetOpen && !editing && !form.primary_provider && providersData[0]?.name) {
 			const first = providersData[0].name;
@@ -178,12 +187,11 @@ export default function CircuitBreakerView() {
 		}
 	}, [sheetOpen, editing, form.primary_provider, providersData]);
 
-	// Auto name
 	useEffect(() => {
 		if (!sheetOpen || form.nameTouched || editing) return;
-		const n = autoName(form.primary_provider, form.primary_model, form.fallbacks);
+		const n = autoName(form.primary_provider, form.primary_models, form.fallbacks);
 		if (n && n !== form.name) setForm((prev) => ({ ...prev, name: n }));
-	}, [sheetOpen, form.primary_provider, form.primary_model, form.fallbacks, form.nameTouched, form.name, editing]);
+	}, [sheetOpen, form.primary_provider, form.primary_models, form.fallbacks, form.nameTouched, form.name, editing]);
 
 	const openCreate = () => {
 		setEditing(null);
@@ -199,7 +207,7 @@ export default function CircuitBreakerView() {
 			nameTouched: true,
 			enabled: p.enabled !== false,
 			primary_provider: p.primary_provider,
-			primary_model: p.primary_model,
+			primary_models: primaryModelsOf(p),
 			primary_key_ids: p.primary_key_ids ?? [],
 			fallbacks: hopsFromPolicy(p),
 			default_cooldown: p.default_cooldown || "30s",
@@ -247,8 +255,9 @@ export default function CircuitBreakerView() {
 				model: h.model.trim(),
 				...(h.key_id.trim() ? { key_id: h.key_id.trim() } : {}),
 			}));
-		if (!form.primary_provider.trim() || !form.primary_model.trim()) {
-			setError("请选择主提供商与主模型");
+		const primaryModels = form.primary_models.map((m) => m.trim()).filter(Boolean);
+		if (!form.primary_provider.trim() || primaryModels.length === 0) {
+			setError("请选择主提供商，并至少选择一个主模型");
 			return;
 		}
 		if (hops.length === 0) {
@@ -256,15 +265,15 @@ export default function CircuitBreakerView() {
 			return;
 		}
 		const name =
-			form.name.trim() || autoName(form.primary_provider, form.primary_model, form.fallbacks) || `cb-${Date.now()}`;
+			form.name.trim() || autoName(form.primary_provider, primaryModels, form.fallbacks) || `cb-${Date.now()}`;
 		const body: CircuitBreakerPolicy = {
 			name,
 			enabled: form.enabled,
 			primary_provider: form.primary_provider.trim(),
-			primary_model: form.primary_model.trim(),
+			primary_models: primaryModels,
+			primary_model: primaryModels[0],
 			primary_key_ids: form.primary_key_ids.length > 0 ? form.primary_key_ids : undefined,
 			fallbacks: hops,
-			// legacy mirrors
 			fallback_provider: hops[0].provider,
 			fallback_model: hops[0].model,
 			fallback_key_id: hops[0].key_id,
@@ -300,7 +309,7 @@ export default function CircuitBreakerView() {
 					<div>
 						<h1 className="text-xl font-semibold">{t("Circuit Breaker")}</h1>
 						<p className="text-muted-foreground mt-1 max-w-2xl text-sm">
-							精确到 API Key；支持多级备用链。主通道持续失败后自动按顺序切备，冷却后再试主。
+							支持多主模型、API Key 级熔断与多级备用链。主通道持续失败后自动按序切备，冷却后再试主。
 						</p>
 					</div>
 				</div>
@@ -323,7 +332,6 @@ export default function CircuitBreakerView() {
 				</div>
 			</div>
 
-			{/* Policy table */}
 			<div className="rounded-lg border">
 				<div className="bg-muted/40 flex items-center justify-between border-b px-4 py-3">
 					<div className="text-sm font-medium">
@@ -347,6 +355,7 @@ export default function CircuitBreakerView() {
 						{policies.map((p) => {
 							const st = stateByName.get(p.name);
 							const hops = hopsFromPolicy(p).filter((h) => h.provider && h.model);
+							const models = primaryModelsOf(p);
 							return (
 								<li
 									key={p.name}
@@ -358,6 +367,9 @@ export default function CircuitBreakerView() {
 											<span className="font-medium">{p.name}</span>
 											{stateBadge(st?.state ?? "closed")}
 											{p.enabled === false && <span className="text-muted-foreground text-xs">{t("disabled")}</span>}
+											{models.length > 1 && (
+												<span className="bg-muted rounded px-1.5 py-0.5 text-[10px] font-medium">{models.length} 主模型</span>
+											)}
 											{(p.primary_key_ids?.length ?? 0) > 0 && (
 												<span className="bg-muted rounded px-1.5 py-0.5 text-[10px] font-medium">
 													{p.primary_key_ids!.length} key
@@ -378,7 +390,10 @@ export default function CircuitBreakerView() {
 										{st?.key_states && st.key_states.length > 0 && (
 											<div className="mt-2 flex flex-wrap gap-1.5">
 												{st.key_states.map((ks) => (
-													<span key={ks.key_id} className="bg-muted inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px]">
+													<span
+														key={ks.key_id}
+														className="bg-muted inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px]"
+													>
 														<code className="max-w-[72px] truncate">{ks.key_id}</code>
 														{stateBadge(ks.state)}
 													</span>
@@ -422,18 +437,16 @@ export default function CircuitBreakerView() {
 				)}
 			</div>
 
-			{/* Create / Edit sheet — routing-rules style */}
 			<Sheet open={sheetOpen} onOpenChange={setSheetOpen}>
 				<SheetContent className="flex w-full flex-col gap-0 overflow-y-auto sm:max-w-xl" side="right">
 					<SheetHeader className="border-b px-6 py-4 text-left">
-						<SheetTitle>{editing ? t("Edit") + " · " + editing.name : t("Create policy")}</SheetTitle>
+						<SheetTitle>{editing ? `${t("Edit")} · ${editing.name}` : t("Create policy")}</SheetTitle>
 						<SheetDescription>
-							主：提供商 / 模型 / Key（可选多 Key）。备：按顺序的多级链，每级可指定 Key。
+							主：提供商 + 多模型 + Key（可选）。备：有序多级链，每级可指定 Key。
 						</SheetDescription>
 					</SheetHeader>
 
 					<div className="flex flex-1 flex-col gap-6 px-6 py-5">
-						{/* Basics */}
 						<div className="space-y-4">
 							<div className="space-y-2">
 								<Label>{t("Name")}</Label>
@@ -452,47 +465,46 @@ export default function CircuitBreakerView() {
 
 						<Separator />
 
-						{/* Primary */}
 						<div className="space-y-3">
 							<div>
 								<Label className="text-base">主通道（监控对象）</Label>
 								<p className="text-muted-foreground mt-0.5 text-xs">
-									精确到 Key：勾选后按 Key 分别熔断；全部 Key 熔断才走备用链。留空=该模型下所有 Key 共用一个电路。
+									可多选主模型（同一套 Key/备用链）。Key 勾选后按 Key 分别熔断；全部 Key 熔断才走备用链。
 								</p>
 							</div>
 							<div className="space-y-3 rounded-lg border p-3">
-								<div className="grid gap-3 sm:grid-cols-2">
-									<div className="space-y-1.5">
-										<Label className="text-xs">{t("Primary provider")}</Label>
-										<ComboboxSelect
-											options={providerOptions}
-											value={form.primary_provider || null}
-											onValueChange={(v) =>
-												setForm((prev) => ({
-													...prev,
-													primary_provider: v ?? "",
-													primary_model: "",
-													primary_key_ids: [],
-												}))
-											}
-											placeholder={t("Select provider")}
-											emptyMessage={t("No providers found")}
-											noPortal
-										/>
-									</div>
-									<div className="space-y-1.5">
-										<Label className="text-xs">{t("Primary model")}</Label>
-										<ModelMultiselect
-											isSingleSelect
-											provider={form.primary_provider || undefined}
-											value={form.primary_model}
-											onChange={(model) => setForm((prev) => ({ ...prev, primary_model: model }))}
-											placeholder={t("Search models...")}
-											disabled={!form.primary_provider}
-											clearable
-											className="!h-9 !min-h-9 w-full"
-										/>
-									</div>
+								<div className="space-y-1.5">
+									<Label className="text-xs">{t("Primary provider")}</Label>
+									<ComboboxSelect
+										options={providerOptions}
+										value={form.primary_provider || null}
+										onValueChange={(v) =>
+											setForm((prev) => ({
+												...prev,
+												primary_provider: v ?? "",
+												primary_models: [],
+												primary_key_ids: [],
+											}))
+										}
+										placeholder={t("Select provider")}
+										emptyMessage={t("No providers found")}
+										noPortal
+									/>
+								</div>
+								<div className="space-y-1.5">
+									<Label className="text-xs">主模型（可多选）</Label>
+									<ModelMultiselect
+										provider={form.primary_provider || undefined}
+										value={form.primary_models}
+										onChange={(models) => setForm((prev) => ({ ...prev, primary_models: models }))}
+										placeholder="选择一个或多个主模型，如 sol + terra"
+										disabled={!form.primary_provider}
+										clearable
+										className="w-full"
+									/>
+									<p className="text-muted-foreground text-[11px]">
+										同一策略监控多个主模型，共用 Key 与多级备用链，无需每个模型单独建策略。
+									</p>
 								</div>
 								<div className="space-y-1.5">
 									<Label className="text-xs">主 API Key（可多选，可选）</Label>
@@ -503,7 +515,10 @@ export default function CircuitBreakerView() {
 											{primaryKeyOptions.map((opt) => {
 												const checked = form.primary_key_ids.includes(opt.value);
 												return (
-													<label key={opt.value} className="hover:bg-muted/50 flex cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-sm">
+													<label
+														key={opt.value}
+														className="hover:bg-muted/50 flex cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-sm"
+													>
 														<input
 															type="checkbox"
 															className="accent-primary h-4 w-4"
@@ -529,12 +544,13 @@ export default function CircuitBreakerView() {
 
 						<Separator />
 
-						{/* Multi-level fallbacks */}
 						<div className="space-y-3">
 							<div className="flex items-center justify-between gap-2">
 								<div>
 									<Label className="text-base">多级备用链</Label>
-									<p className="text-muted-foreground mt-0.5 text-xs">按顺序尝试；第 1 级先接，失败再下一级（与路由规则 Fallbacks 类似）</p>
+									<p className="text-muted-foreground mt-0.5 text-xs">
+										按顺序尝试；第 1 级先接，失败再下一级（与路由规则 Fallbacks 类似）
+									</p>
 								</div>
 								<Button type="button" variant="outline" size="sm" onClick={addHop} className="gap-1">
 									<Plus className="h-4 w-4" />
@@ -597,16 +613,20 @@ export default function CircuitBreakerView() {
 									);
 								})}
 							</div>
-							<p className="text-muted-foreground text-xs">熔断打开后：请求改写到第 1 级，其余级写入请求 fallbacks，按序接力。</p>
+							<p className="text-muted-foreground text-xs">
+								熔断打开后：请求改写到第 1 级，其余级写入请求 fallbacks，按序接力。
+							</p>
 						</div>
 
 						<Separator />
 
-						{/* Thresholds */}
 						<div className="grid gap-3 sm:grid-cols-3">
 							<div className="space-y-1.5">
 								<Label className="text-xs">{t("Cooldown")}</Label>
-								<Input value={form.default_cooldown} onChange={(e) => setForm({ ...form, default_cooldown: e.target.value })} />
+								<Input
+									value={form.default_cooldown}
+									onChange={(e) => setForm({ ...form, default_cooldown: e.target.value })}
+								/>
 							</div>
 							<div className="space-y-1.5">
 								<Label className="text-xs">{t("Failure threshold")}</Label>
@@ -618,7 +638,10 @@ export default function CircuitBreakerView() {
 							</div>
 							<div className="space-y-1.5">
 								<Label className="text-xs">{t("Failure window")}</Label>
-								<Input value={form.failure_window} onChange={(e) => setForm({ ...form, failure_window: e.target.value })} />
+								<Input
+									value={form.failure_window}
+									onChange={(e) => setForm({ ...form, failure_window: e.target.value })}
+								/>
 							</div>
 						</div>
 

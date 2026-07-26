@@ -240,3 +240,38 @@ func TestEngine_MultiLevelFallbacksAndKeys(t *testing.T) {
 		t.Fatalf("expected remaining hop anthropic, got %+v", fbs)
 	}
 }
+
+func TestEngine_MultiPrimaryModels(t *testing.T) {
+	e := NewEngine(nil)
+	if err := e.SetPolicies([]Policy{{
+		Name:             "multi",
+		Enabled:          true,
+		PrimaryProvider:  "catai",
+		PrimaryModels:    []string{"gpt-5.6-sol", "gpt-5.6-terra"},
+		Fallbacks:        []FallbackHop{{Provider: "catai", Model: "gpt-5.6-sol", KeyID: "stable"}},
+		DefaultCooldown:   30 * time.Second,
+		FailureThreshold: 1,
+		FailureWindow:    time.Minute,
+	}}); err != nil {
+		t.Fatal(err)
+	}
+	p, ok := e.GetPolicy("multi")
+	if !ok || p.PrimaryModel != "gpt-5.6-sol" || len(p.PrimaryModels) != 2 {
+		t.Fatalf("normalize failed: %+v", p)
+	}
+	status := 503
+	fail := &schemas.BifrostError{StatusCode: &status, Error: &schemas.ErrorField{Message: "down"}}
+	for _, model := range []string{"gpt-5.6-sol", "gpt-5.6-terra"} {
+		req := &schemas.BifrostRequest{RequestType: schemas.ChatCompletionRequest, ChatRequest: &schemas.BifrostChatRequest{Provider: "catai", Model: model}}
+		ctx := schemas.NewBifrostContext(nil, schemas.NoDeadline)
+		ctx.SetValue(schemas.BifrostContextKeyFallbackIndex, 0)
+		e.ObserveAttempt(ctx, req, nil, fail)
+	}
+	req := &schemas.BifrostRequest{RequestType: schemas.ChatCompletionRequest, ChatRequest: &schemas.BifrostChatRequest{Provider: "catai", Model: "gpt-5.6-terra"}}
+	ctx := schemas.NewBifrostContext(nil, schemas.NoDeadline)
+	e.ApplyIfOpen(ctx, req)
+	prov, model, _ := req.GetRequestFields()
+	if string(prov) != "catai" || model != "gpt-5.6-sol" {
+		t.Fatalf("expected rewrite for terra primary, got %s/%s", prov, model)
+	}
+}
