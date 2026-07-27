@@ -2,6 +2,9 @@ package handlers
 
 import (
 	"encoding/json"
+	"fmt"
+	"os"
+	"path/filepath"
 	"time"
 
 	"github.com/fasthttp/router"
@@ -15,13 +18,18 @@ import (
 type CircuitBreakerEngineResolver func() *circuitbreaker.Engine
 
 // CircuitBreakerHandler exposes CRUD + state for first-class circuit breaker.
+// Policies are kept in the live engine and also written to config.json under
+// circuit_breaker_config so they survive restarts (previously memory-only).
 type CircuitBreakerHandler struct {
-	resolve CircuitBreakerEngineResolver
+	resolve   CircuitBreakerEngineResolver
+	configDir string
 }
 
 // NewCircuitBreakerHandler wires CB management routes.
-func NewCircuitBreakerHandler(resolve CircuitBreakerEngineResolver) *CircuitBreakerHandler {
-	return &CircuitBreakerHandler{resolve: resolve}
+// configDir is the app data directory that contains config.json (may be empty:
+// then mutations stay in-memory only — same as the old behavior).
+func NewCircuitBreakerHandler(resolve CircuitBreakerEngineResolver, configDir string) *CircuitBreakerHandler {
+	return &CircuitBreakerHandler{resolve: resolve, configDir: configDir}
 }
 
 func (h *CircuitBreakerHandler) RegisterRoutes(r *router.Router, middlewares ...schemas.BifrostHTTPMiddleware) {
@@ -47,21 +55,21 @@ func (h *CircuitBreakerHandler) engineOrError(ctx *fasthttp.RequestCtx) *circuit
 }
 
 type policyWire struct {
-	Name             string                    `json:"name"`
-	Enabled          *bool                     `json:"enabled,omitempty"`
-	PrimaryProvider  string                    `json:"primary_provider"`
-	PrimaryModel     string                    `json:"primary_model,omitempty"`
-	PrimaryModels    []string                  `json:"primary_models,omitempty"`
-	PrimaryKeyIDs    []string                  `json:"primary_key_ids,omitempty"`
+	Name             string                       `json:"name"`
+	Enabled          *bool                        `json:"enabled,omitempty"`
+	PrimaryProvider  string                       `json:"primary_provider"`
+	PrimaryModel     string                       `json:"primary_model,omitempty"`
+	PrimaryModels    []string                     `json:"primary_models,omitempty"`
+	PrimaryKeyIDs    []string                     `json:"primary_key_ids,omitempty"`
 	Fallbacks        []circuitbreaker.FallbackHop `json:"fallbacks,omitempty"`
-	FallbackProvider string                    `json:"fallback_provider,omitempty"`
-	FallbackModel    string                    `json:"fallback_model,omitempty"`
-	FallbackKeyID    string                    `json:"fallback_key_id,omitempty"`
-	DefaultCooldown  string                    `json:"default_cooldown,omitempty"`
-	CooldownHeader   string                    `json:"cooldown_header,omitempty"`
-	FailureThreshold int                       `json:"failure_threshold,omitempty"`
-	FailureWindow    string                    `json:"failure_window,omitempty"`
-	Condition        *circuitbreaker.Condition `json:"condition,omitempty"`
+	FallbackProvider string                       `json:"fallback_provider,omitempty"`
+	FallbackModel    string                       `json:"fallback_model,omitempty"`
+	FallbackKeyID    string                       `json:"fallback_key_id,omitempty"`
+	DefaultCooldown  string                       `json:"default_cooldown,omitempty"`
+	CooldownHeader   string                       `json:"cooldown_header,omitempty"`
+	FailureThreshold int                          `json:"failure_threshold,omitempty"`
+	FailureWindow    string                       `json:"failure_window,omitempty"`
+	Condition        *circuitbreaker.Condition    `json:"condition,omitempty"`
 }
 
 func policyToWire(p circuitbreaker.Policy) policyWire {
@@ -121,6 +129,52 @@ func wireToPolicy(w policyWire) (circuitbreaker.Policy, error) {
 	return p, nil
 }
 
+// persistPolicies writes the current engine policy set into config.json
+// under circuit_breaker_config. Other top-level keys are preserved.
+// Best-effort: returns error so callers can surface it, but does not roll back
+// the in-memory mutation (engine is source of truth for the running process).
+func (h *CircuitBreakerHandler) persistPolicies(e *circuitbreaker.Engine) error {
+	if h.configDir == "" {
+		return nil
+	}
+	path := filepath.Join(h.configDir, "config.json")
+	raw, err := os.ReadFile(path)
+	var root map[string]json.RawMessage
+	if err != nil {
+		if !os.IsNotExist(err) {
+			return fmt.Errorf("read config.json: %w", err)
+		}
+		root = make(map[string]json.RawMessage)
+	} else if len(raw) == 0 {
+		root = make(map[string]json.RawMessage)
+	} else if err := json.Unmarshal(raw, &root); err != nil {
+		return fmt.Errorf("parse config.json: %w", err)
+	}
+
+	fc := circuitbreaker.PoliciesToFileConfig(e.ListPolicies())
+	encoded, err := json.Marshal(fc)
+	if err != nil {
+		return fmt.Errorf("marshal circuit_breaker_config: %w", err)
+	}
+	root["circuit_breaker_config"] = encoded
+
+	out, err := json.MarshalIndent(root, "", "  ")
+	if err != nil {
+		return fmt.Errorf("marshal config.json: %w", err)
+	}
+	out = append(out, '\n')
+
+	tmp := path + ".tmp"
+	if err := os.WriteFile(tmp, out, 0o644); err != nil {
+		return fmt.Errorf("write config.json tmp: %w", err)
+	}
+	if err := os.Rename(tmp, path); err != nil {
+		_ = os.Remove(tmp)
+		return fmt.Errorf("replace config.json: %w", err)
+	}
+	return nil
+}
+
 func (h *CircuitBreakerHandler) listPolicies(ctx *fasthttp.RequestCtx) {
 	e := h.engineOrError(ctx)
 	if e == nil {
@@ -155,6 +209,10 @@ func (h *CircuitBreakerHandler) createPolicy(ctx *fasthttp.RequestCtx) {
 	}
 	if err := e.UpsertPolicy(p); err != nil {
 		SendError(ctx, fasthttp.StatusBadRequest, err.Error())
+		return
+	}
+	if err := h.persistPolicies(e); err != nil {
+		SendError(ctx, fasthttp.StatusInternalServerError, "policy saved in memory but failed to persist: "+err.Error())
 		return
 	}
 	got, _ := e.GetPolicy(p.Name)
@@ -197,6 +255,10 @@ func (h *CircuitBreakerHandler) updatePolicy(ctx *fasthttp.RequestCtx) {
 		SendError(ctx, fasthttp.StatusBadRequest, err.Error())
 		return
 	}
+	if err := h.persistPolicies(e); err != nil {
+		SendError(ctx, fasthttp.StatusInternalServerError, "policy updated in memory but failed to persist: "+err.Error())
+		return
+	}
 	got, _ := e.GetPolicy(name)
 	SendJSON(ctx, policyToWire(got))
 }
@@ -209,6 +271,10 @@ func (h *CircuitBreakerHandler) deletePolicy(ctx *fasthttp.RequestCtx) {
 	name, _ := ctx.UserValue("name").(string)
 	if err := e.DeletePolicy(name); err != nil {
 		SendError(ctx, fasthttp.StatusNotFound, err.Error())
+		return
+	}
+	if err := h.persistPolicies(e); err != nil {
+		SendError(ctx, fasthttp.StatusInternalServerError, "policy deleted in memory but failed to persist: "+err.Error())
 		return
 	}
 	SendJSON(ctx, map[string]string{"status": "deleted"})

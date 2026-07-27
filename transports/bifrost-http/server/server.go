@@ -1563,7 +1563,7 @@ func (s *BifrostHTTPServer) RegisterAPIRoutes(ctx context.Context, callbacks Ser
 	cacheHandler.RegisterRoutes(s.Router, middlewares...)
 	cbHandler := handlers.NewCircuitBreakerHandler(func() *circuitbreaker.Engine {
 		return s.CircuitBreaker
-	})
+	}, GetDefaultConfigDir(s.AppDir))
 	cbHandler.RegisterRoutes(s.Router, middlewares...)
 	if featureFlagsHandler != nil {
 		featureFlagsHandler.RegisterRoutes(s.Router, middlewares...)

@@ -80,14 +80,10 @@ import { Link, useLocation, useNavigate } from "@tanstack/react-router";
 import { ChevronRight } from "lucide-react";
 import { useTheme } from "next-themes";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useCookies } from "react-cookie";
 import { cn } from "@/lib/utils";
 import { ThemeToggle } from "./themeToggle";
 import { Badge } from "./ui/badge";
 import { PromoCardStack } from "./ui/promoCardStack";
-
-// Cookie name for dismissing production setup card
-const PRODUCTION_SETUP_DISMISSED_COOKIE = "bifrost_production_setup_dismissed";
 
 const newBadgeClassName =
 	"relative overflow-hidden after:pointer-events-none after:absolute after:inset-y-0 after:-left-full after:w-full after:skew-x-[-18deg] after:bg-gradient-to-r after:from-transparent after:via-primary/25 after:to-transparent after:opacity-0 after:content-[''] after:animate-[sidebar-new-badge-shine_1200ms_cubic-bezier(0.22,1,0.36,1)_260ms_both]";
@@ -138,30 +134,6 @@ const externalLinks = [
 		strokeWidth: 1,
 	},
 ];
-
-// Base promotional card (memoized outside component to prevent recreation)
-const productionSetupHelpCard = {
-	id: "production-setup",
-	title: "Need help with production setup?",
-	description: (
-		<>
-			We offer help with production setup including custom integrations and dedicated support.
-			<br />
-			<br />
-			Book a demo with our team{" "}
-			<a
-				href="https://calendly.com/maximai/bifrost-demo?utm_source=bfd_sdbr"
-				target="_blank"
-				className="text-primary font-medium underline"
-				rel="noopener noreferrer"
-			>
-				here
-			</a>
-			.
-		</>
-	),
-	dismissible: true,
-};
 
 // Sidebar item interface
 interface SidebarItem {
@@ -564,8 +536,6 @@ export default function AppSidebar() {
 	const [searchQuery, setSearchQuery] = useState("");
 	const [focusedIndex, setFocusedIndex] = useState(-1);
 	const searchInputRef = useRef<HTMLInputElement>(null);
-	const [cookies, setCookie] = useCookies([PRODUCTION_SETUP_DISMISSED_COOKIE]);
-	const isProductionSetupDismissed = !!cookies[PRODUCTION_SETUP_DISMISSED_COOKIE];
 	const { data: latestRelease } = useGetLatestReleaseQuery(undefined, {
 		skip: !mounted, // Only fetch after component is mounted
 	});
@@ -1339,12 +1309,10 @@ export default function AppSidebar() {
 				dismissible: true,
 			});
 		}
-		// Only show after mounted to ensure cookie is properly hydrated and avoid flash
-		if (!IS_ENTERPRISE && mounted && !isProductionSetupDismissed) {
-			cards.push(productionSetupHelpCard);
-		}
+		// OSS self-hosted: hide Maxim sales "production setup" promo permanently.
+		// (Previously: !IS_ENTERPRISE && mounted && !isProductionSetupDismissed)
 		return cards;
-	}, [coreConfig?.restart_required, showNewReleaseBanner, latestRelease, newReleaseImage, isProductionSetupDismissed, mounted]);
+	}, [coreConfig?.restart_required, showNewReleaseBanner, latestRelease, newReleaseImage, mounted]);
 
 	// Reset areCardsEmpty when promoCards changes
 	useEffect(() => {
@@ -1362,19 +1330,9 @@ export default function AppSidebar() {
 		setAreCardsEmpty(true);
 	};
 
-	const handlePromoDismiss = useCallback(
-		(cardId: string) => {
-			if (cardId === "production-setup") {
-				const expiryDate = new Date();
-				expiryDate.setDate(expiryDate.getDate() + 7);
-				setCookie(PRODUCTION_SETUP_DISMISSED_COOKIE, "true", {
-					path: "/",
-					expires: expiryDate,
-				});
-			}
-		},
-		[setCookie],
-	);
+	const handlePromoDismiss = useCallback((_cardId: string) => {
+		// production-setup promo permanently removed; remaining cards (restart/release) have their own handling
+	}, []);
 
 	const handleLogout = async () => {
 		try {

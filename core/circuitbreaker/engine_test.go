@@ -174,6 +174,57 @@ func TestParseFileConfig(t *testing.T) {
 	}
 }
 
+func TestPoliciesToFileConfigRoundTrip(t *testing.T) {
+	en := true
+	original := []Policy{{
+		Name:             "catai-sol-terra-cheap-to-stable-premium",
+		Enabled:          true,
+		PrimaryProvider:  "catai",
+		PrimaryModels:    []string{"gpt-5.6-sol", "gpt-5.6-terra"},
+		PrimaryKeyIDs:    []string{"cheap-id"},
+		Fallbacks: []FallbackHop{
+			{Provider: "catai", Models: []string{"gpt-5.6-sol", "gpt-5.6-terra"}, KeyID: "stable-id"},
+			{Provider: "catai", Models: []string{"gpt-5.6-sol", "gpt-5.6-terra"}, KeyID: "premium-id"},
+		},
+		DefaultCooldown:  30 * time.Second,
+		FailureThreshold: 3,
+		FailureWindow:    60 * time.Second,
+	}}
+	fc := PoliciesToFileConfig(original)
+	if fc == nil || len(fc.Policies) != 1 {
+		t.Fatalf("file config: %+v", fc)
+	}
+	if fc.Policies[0].Enabled == nil || *fc.Policies[0].Enabled != en {
+		t.Fatalf("enabled not set: %+v", fc.Policies[0].Enabled)
+	}
+	if fc.Policies[0].DefaultCooldown != "30s" || fc.Policies[0].FailureWindow != "1m0s" {
+		// Accept either 1m0s or 60s depending on Duration.String()
+		if fc.Policies[0].FailureWindow != "60s" && fc.Policies[0].FailureWindow != "1m0s" {
+			t.Fatalf("durations: cooldown=%q window=%q", fc.Policies[0].DefaultCooldown, fc.Policies[0].FailureWindow)
+		}
+	}
+	back, err := ParseFileConfig(fc)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(back) != 1 {
+		t.Fatalf("roundtrip count %d", len(back))
+	}
+	got := back[0]
+	if got.Name != original[0].Name || got.PrimaryProvider != "catai" {
+		t.Fatalf("identity: %+v", got)
+	}
+	if len(got.PrimaryModels) != 2 || len(got.PrimaryKeyIDs) != 1 {
+		t.Fatalf("primary: models=%v keys=%v", got.PrimaryModels, got.PrimaryKeyIDs)
+	}
+	if len(got.Fallbacks) != 2 || got.Fallbacks[1].KeyID != "premium-id" {
+		t.Fatalf("fallbacks: %+v", got.Fallbacks)
+	}
+	if got.DefaultCooldown != 30*time.Second || got.FailureThreshold != 3 || got.FailureWindow != 60*time.Second {
+		t.Fatalf("params: cd=%v thr=%d win=%v", got.DefaultCooldown, got.FailureThreshold, got.FailureWindow)
+	}
+}
+
 func TestEngine_MultiLevelFallbacksAndKeys(t *testing.T) {
 	e := NewEngine(nil)
 	fixed := time.Date(2026, 7, 26, 12, 0, 0, 0, time.UTC)

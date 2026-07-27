@@ -724,6 +724,38 @@ func ParseFileConfig(fc *FileConfig) ([]Policy, error) {
 	return out, nil
 }
 
+// PoliciesToFileConfig converts live engine policies into the config.json shape.
+// Durations are written as Go duration strings so ParseFileConfig can round-trip them.
+func PoliciesToFileConfig(policies []Policy) *FileConfig {
+	out := &FileConfig{Policies: make([]FilePolicy, 0, len(policies))}
+	for _, p := range policies {
+		en := p.Enabled
+		fp := FilePolicy{
+			Name:             p.Name,
+			Enabled:          &en,
+			PrimaryProvider:  p.PrimaryProvider,
+			PrimaryModel:     p.PrimaryModel,
+			PrimaryModels:    p.PrimaryModels,
+			PrimaryKeyIDs:    p.PrimaryKeyIDs,
+			Fallbacks:        p.Fallbacks,
+			FallbackProvider: p.FallbackProvider,
+			FallbackModel:    p.FallbackModel,
+			FallbackKeyID:    p.FallbackKeyID,
+			CooldownHeader:   p.CooldownHeader,
+			FailureThreshold: p.FailureThreshold,
+			Condition:        p.Condition,
+		}
+		if p.DefaultCooldown > 0 {
+			fp.DefaultCooldown = p.DefaultCooldown.String()
+		}
+		if p.FailureWindow > 0 {
+			fp.FailureWindow = p.FailureWindow.String()
+		}
+		out.Policies = append(out.Policies, fp)
+	}
+	return out
+}
+
 // effectiveFallbacks returns a flat ordered chain for runtime rewrite.
 // Multi-model hops expand as: hop.models[0], hop.models[1], ... then next hop.
 func effectiveFallbacks(p Policy) []FallbackHop {
