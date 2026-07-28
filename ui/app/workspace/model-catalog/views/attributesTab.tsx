@@ -12,7 +12,7 @@ import { ModelDetails, useGetModelDetailsQuery, useGetProvidersQuery } from "@/l
 import { KnownProvider } from "@/lib/types/config";
 import { formatTokenPriceCompact } from "@/lib/utils/numbers";
 import { RbacOperation, RbacResource, useRbac } from "@enterprise/lib";
-import { ChevronLeft, ChevronRight, Edit, Search } from "lucide-react";
+import { ChevronLeft, ChevronRight, Edit, RefreshCw, Search } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import AttributeSheet from "./attributeSheet";
 
@@ -61,7 +61,7 @@ export default function AttributesTab({ hasAccess }: AttributesTabProps) {
 	}, [debouncedSearch, providerFilter]);
 
 	const { data: providersData } = useGetProvidersQuery(undefined, { skip: !hasAccess });
-	const { data, isLoading, error, refetch } = useGetModelDetailsQuery(
+	const { data, isLoading, isFetching, error, refetch } = useGetModelDetailsQuery(
 		{
 			query: debouncedSearch || undefined,
 			provider: providerFilter || undefined,
@@ -141,6 +141,23 @@ export default function AttributesTab({ hasAccess }: AttributesTabProps) {
 							))}
 						</SelectContent>
 					</Select>
+					<TooltipProvider>
+						<Tooltip>
+							<TooltipTrigger asChild>
+								<Button
+									variant="outline"
+									size="icon"
+									onClick={() => refetch()}
+									disabled={isFetching}
+									data-testid="model-catalog-refresh-button"
+									aria-label="Refresh model catalog"
+								>
+									<RefreshCw className={`h-4 w-4 ${isFetching ? "animate-spin" : ""}`} />
+								</Button>
+							</TooltipTrigger>
+							<TooltipContent>Refresh model catalog</TooltipContent>
+						</Tooltip>
+					</TooltipProvider>
 				</div>
 
 				<div className="mb-2 min-h-0 grow overflow-hidden rounded-sm border" data-testid="model-catalog-attributes-table">
