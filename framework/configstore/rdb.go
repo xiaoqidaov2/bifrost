@@ -5392,6 +5392,41 @@ func (s *RDBConfigStore) UpdateComplexityAnalyzerConfig(ctx context.Context, con
 	}, tx...)
 }
 
+// GetComplexityTierRoutingConfig retrieves the typed tier-to-model-group routing configuration.
+func (s *RDBConfigStore) GetComplexityTierRoutingConfig(ctx context.Context) (*ComplexityTierRoutingConfig, error) {
+	var configEntry tables.TableGovernanceConfig
+	err := s.DB().WithContext(ctx).First(&configEntry, "key = ?", tables.ConfigComplexityTierRoutingKey).Error
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) || errors.Is(err, ErrNotFound) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	if strings.TrimSpace(configEntry.Value) == "" {
+		return nil, nil
+	}
+	return DecodeComplexityTierRoutingConfig([]byte(configEntry.Value))
+}
+
+// UpdateComplexityTierRoutingConfig normalizes, validates, and persists tier-to-model-group routing.
+func (s *RDBConfigStore) UpdateComplexityTierRoutingConfig(ctx context.Context, config *ComplexityTierRoutingConfig, tx ...*gorm.DB) error {
+	if config == nil {
+		return fmt.Errorf("complexity tier routing config is nil")
+	}
+	normalized := config.Normalized()
+	if err := normalized.Validate(); err != nil {
+		return err
+	}
+	raw, err := json.Marshal(normalized)
+	if err != nil {
+		return fmt.Errorf("failed to marshal complexity tier routing config: %w", err)
+	}
+	return s.UpdateConfig(ctx, &tables.TableGovernanceConfig{
+		Key:   tables.ConfigComplexityTierRoutingKey,
+		Value: string(raw),
+	}, tx...)
+}
+
 // GetAuthConfig retrieves the auth configuration from the database.
 func (s *RDBConfigStore) GetAuthConfig(ctx context.Context) (*AuthConfig, error) {
 	var username *string

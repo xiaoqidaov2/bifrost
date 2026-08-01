@@ -157,6 +157,28 @@ func TestRDBConfigStore_GetComplexityAnalyzerConfigMissingReturnsNil(t *testing.
 	assert.Nil(t, got)
 }
 
+func TestRDBConfigStore_ComplexityTierRoutingConfigRoundTrip(t *testing.T) {
+	store := setupRDBTestStore(t)
+	ctx := context.Background()
+	config := DefaultComplexityTierRoutingConfig()
+	config.Tiers[0].Models = []string{" openai/gpt-4.1-nano ", "anthropic/claude-haiku"}
+	config.Tiers[3].Enabled = false
+
+	require.NoError(t, store.UpdateComplexityTierRoutingConfig(ctx, &config))
+	got, err := store.GetComplexityTierRoutingConfig(ctx)
+	require.NoError(t, err)
+	require.NotNil(t, got)
+	assert.Equal(t, []string{"openai/gpt-4.1-nano", "anthropic/claude-haiku"}, got.Tiers[0].Models)
+	assert.False(t, got.Tiers[3].Enabled)
+}
+
+func TestRDBConfigStore_ComplexityTierRoutingConfigMissingReturnsNil(t *testing.T) {
+	store := setupRDBTestStore(t)
+	got, err := store.GetComplexityTierRoutingConfig(context.Background())
+	require.NoError(t, err)
+	assert.Nil(t, got)
+}
+
 func TestRDBConfigStore_UpdateComplexityAnalyzerConfigPreservesExistingHashesOnRuntimeUpdate(t *testing.T) {
 	store := setupRDBTestStore(t)
 	ctx := context.Background()

@@ -14,6 +14,106 @@ type ComplexityTierBoundaries struct {
 	ComplexReasoning float64 `json:"complex_reasoning"`
 }
 
+// ComplexityTier identifies one stable complexity classification band.
+type ComplexityTier string
+
+const (
+	ComplexityTierSimple    ComplexityTier = "SIMPLE"
+	ComplexityTierMedium    ComplexityTier = "MEDIUM"
+	ComplexityTierComplex   ComplexityTier = "COMPLEX"
+	ComplexityTierReasoning ComplexityTier = "REASONING"
+)
+
+var complexityTierOrder = []ComplexityTier{
+	ComplexityTierSimple,
+	ComplexityTierMedium,
+	ComplexityTierComplex,
+	ComplexityTierReasoning,
+}
+
+// ComplexityTierModelGroup is the enabled state and ordered fallback models for a tier.
+type ComplexityTierModelGroup struct {
+	Tier    ComplexityTier `json:"tier"`
+	Enabled bool           `json:"enabled"`
+	Models  []string       `json:"models"`
+}
+
+// ComplexityTierRoutingConfig maps every supported complexity tier to its model group.
+type ComplexityTierRoutingConfig struct {
+	Tiers []ComplexityTierModelGroup `json:"tiers"`
+}
+
+// DefaultComplexityTierRoutingConfig returns the complete, disabled-by-model default mapping.
+func DefaultComplexityTierRoutingConfig() ComplexityTierRoutingConfig {
+	tiers := make([]ComplexityTierModelGroup, len(complexityTierOrder))
+	for i, tier := range complexityTierOrder {
+		tiers[i] = ComplexityTierModelGroup{Tier: tier, Enabled: true, Models: []string{}}
+	}
+	return ComplexityTierRoutingConfig{Tiers: tiers}
+}
+
+// Validate requires one canonical entry for each supported tier and usable model IDs.
+func (c *ComplexityTierRoutingConfig) Validate() error {
+	if c == nil {
+		return fmt.Errorf("complexity tier routing config is nil")
+	}
+	if len(c.Tiers) != len(complexityTierOrder) {
+		return fmt.Errorf("tiers must contain exactly %d entries", len(complexityTierOrder))
+	}
+	for i, expectedTier := range complexityTierOrder {
+		entry := c.Tiers[i]
+		if entry.Tier != expectedTier {
+			return fmt.Errorf("tiers[%d].tier must be %q", i, expectedTier)
+		}
+		seen := make(map[string]struct{}, len(entry.Models))
+		for j, model := range entry.Models {
+			if strings.TrimSpace(model) == "" {
+				return fmt.Errorf("tiers[%d].models[%d] must not be empty", i, j)
+			}
+			if _, duplicate := seen[model]; duplicate {
+				return fmt.Errorf("tiers[%d].models contains duplicate model %q", i, model)
+			}
+			seen[model] = struct{}{}
+		}
+	}
+	return nil
+}
+
+// Normalized returns a canonical copy suitable for persistence and API responses.
+func (c *ComplexityTierRoutingConfig) Normalized() ComplexityTierRoutingConfig {
+	if c == nil {
+		return ComplexityTierRoutingConfig{}
+	}
+	normalized := ComplexityTierRoutingConfig{Tiers: make([]ComplexityTierModelGroup, len(c.Tiers))}
+	for i, entry := range c.Tiers {
+		models := make([]string, 0, len(entry.Models))
+		for _, model := range entry.Models {
+			models = append(models, strings.TrimSpace(model))
+		}
+		if models == nil {
+			models = []string{}
+		}
+		normalized.Tiers[i] = ComplexityTierModelGroup{Tier: entry.Tier, Enabled: entry.Enabled, Models: models}
+	}
+	return normalized
+}
+
+// DecodeComplexityTierRoutingConfig decodes, normalizes, and validates persisted JSON.
+func DecodeComplexityTierRoutingConfig(data []byte) (*ComplexityTierRoutingConfig, error) {
+	if len(data) == 0 {
+		return nil, nil
+	}
+	var config ComplexityTierRoutingConfig
+	if err := json.Unmarshal(data, &config); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal complexity tier routing config: %w", err)
+	}
+	normalized := config.Normalized()
+	if err := normalized.Validate(); err != nil {
+		return nil, fmt.Errorf("invalid complexity tier routing config: %w", err)
+	}
+	return &normalized, nil
+}
+
 // Validate checks that tier boundaries are ordered and inside the analyzer score range.
 func (b *ComplexityTierBoundaries) Validate() error {
 	if b == nil {

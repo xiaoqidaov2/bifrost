@@ -287,6 +287,10 @@ type ConfigStore interface {
 	GetComplexityAnalyzerConfig(ctx context.Context) (*ComplexityAnalyzerConfig, error)
 	// UpdateComplexityAnalyzerConfig persists the normalized analyzer config.
 	UpdateComplexityAnalyzerConfig(ctx context.Context, config *ComplexityAnalyzerConfig, tx ...*gorm.DB) error
+	// GetComplexityTierRoutingConfig retrieves persisted tier-to-model-group routing, if configured.
+	GetComplexityTierRoutingConfig(ctx context.Context) (*ComplexityTierRoutingConfig, error)
+	// UpdateComplexityTierRoutingConfig persists normalized tier-to-model-group routing.
+	UpdateComplexityTierRoutingConfig(ctx context.Context, config *ComplexityTierRoutingConfig, tx ...*gorm.DB) error
 
 	// Plugins CRUD
 	GetPlugins(ctx context.Context) ([]*tables.TablePlugin, error)

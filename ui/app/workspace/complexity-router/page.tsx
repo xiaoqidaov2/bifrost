@@ -12,8 +12,11 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scrollArea";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { TagInput } from "@/components/ui/tagInput";
 import { getErrorMessage } from "@/lib/store";
+import { ComplexityDashboard } from "./views/dashboard";
+import { TierRouting } from "./views/tierRouting";
 import {
 	useGetComplexityAnalyzerConfigQuery,
 	useResetComplexityAnalyzerConfigMutation,
@@ -336,7 +339,7 @@ export default function ComplexityRouterPage() {
 
 	return (
 		<ScrollArea className="no-padding-parent h-[calc(100dvh-1rem)] w-full min-w-0 px-3 pt-3 sm:px-6 sm:pt-4 md:h-[calc(100vh_-_16px)] md:px-14 md:pt-4">
-			<form className="mx-auto w-full max-w-7xl space-y-6 pb-24 sm:space-y-8" onSubmit={handleSubmit(onValid)} noValidate>
+			<div className="mx-auto w-full max-w-7xl space-y-6 pb-24">
 				{/* ── Page header ── */}
 				<div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
 					<div className="space-y-1.5">
@@ -354,6 +357,16 @@ export default function ComplexityRouterPage() {
 						</a>
 					</Button>
 				</div>
+
+				<Tabs defaultValue="config" className="space-y-6">
+					<TabsList>
+						<TabsTrigger value="config">配置</TabsTrigger>
+						<TabsTrigger value="dashboard">仪表盘</TabsTrigger>
+						<TabsTrigger value="tier-routing">Tier 路由</TabsTrigger>
+					</TabsList>
+
+					<TabsContent value="config">
+						<form className="space-y-6 sm:space-y-8" onSubmit={handleSubmit(onValid)} noValidate>
 
 				{/* ── Complexity Spectrum ── */}
 				<div className="bg-card space-y-4 rounded-sm border p-3 sm:p-5">
@@ -551,37 +564,48 @@ export default function ComplexityRouterPage() {
 						{isSaving ? "保存中…" : "保存更改"}
 					</Button>
 				</div>
-			</form>
+							</form>
 
-			<AlertDialog open={restoreDialogOpen} onOpenChange={setRestoreDialogOpen}>
-				<AlertDialogContent>
-					<AlertDialogHeader>
-						<AlertDialogTitle>恢复默认</AlertDialogTitle>
-						<AlertDialogDescription>
-							会把所有分界线和关键词列表还原成出厂设置。当前配置会丢，且不能撤销。
-						</AlertDialogDescription>
-					</AlertDialogHeader>
-					<AlertDialogFooter>
-						<AlertDialogCancel
-							data-testid="complexity-router-restore-cancel-button"
-							onClick={() => setRestoreDialogOpen(false)}
-							disabled={isResetting}
-						>
-							取消
-						</AlertDialogCancel>
-						<AlertDialogAction
-							data-testid="complexity-router-restore-confirm-button"
-							onClick={() => {
-								setRestoreDialogOpen(false);
-								handleRestoreDefaults();
-							}}
-							disabled={!canUpdate || isResetting}
-						>
-							恢复默认
-						</AlertDialogAction>
-					</AlertDialogFooter>
-				</AlertDialogContent>
-			</AlertDialog>
-		</ScrollArea>
-	);
+							<AlertDialog open={restoreDialogOpen} onOpenChange={setRestoreDialogOpen}>
+								<AlertDialogContent>
+									<AlertDialogHeader>
+										<AlertDialogTitle>恢复默认</AlertDialogTitle>
+										<AlertDialogDescription>
+											会把所有分界线和关键词列表还原成出厂设置。当前配置会丢，且不能撤销。
+										</AlertDialogDescription>
+									</AlertDialogHeader>
+									<AlertDialogFooter>
+										<AlertDialogCancel
+											data-testid="complexity-router-restore-cancel-button"
+											onClick={() => setRestoreDialogOpen(false)}
+											disabled={isResetting}
+										>
+											取消
+										</AlertDialogCancel>
+										<AlertDialogAction
+											data-testid="complexity-router-restore-confirm-button"
+											onClick={() => {
+												setRestoreDialogOpen(false);
+												handleRestoreDefaults();
+											}}
+											disabled={!canUpdate || isResetting}
+										>
+											恢复默认
+										</AlertDialogAction>
+									</AlertDialogFooter>
+								</AlertDialogContent>
+							</AlertDialog>
+						</TabsContent>
+
+						<TabsContent value="dashboard">
+							<ComplexityDashboard />
+						</TabsContent>
+
+						<TabsContent value="tier-routing">
+							<TierRouting />
+						</TabsContent>
+					</Tabs>
+				</div>
+			</ScrollArea>
+		);
 }

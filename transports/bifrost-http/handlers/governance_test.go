@@ -421,6 +421,100 @@ func TestComplexityAnalyzerConfigResetPersistsDefaultsAndReloads(t *testing.T) {
 	}
 }
 
+func TestComplexityTierRoutingGetReturnsDefaultsWhenUnset(t *testing.T) {
+	SetLogger(&mockLogger{})
+	store := setupPricingOverrideHandlerStore(t)
+	handler := &GovernanceHandler{configStore: store}
+
+	ctx := newTestRequestCtx("")
+	handler.getComplexityTierRouting(ctx)
+
+	if ctx.Response.StatusCode() != fasthttp.StatusOK {
+		t.Fatalf("expected status 200, got %d: %s", ctx.Response.StatusCode(), string(ctx.Response.Body()))
+	}
+	var response configstore.ComplexityTierRoutingConfig
+	if err := json.Unmarshal(ctx.Response.Body(), &response); err != nil {
+		t.Fatalf("unmarshal response: %v", err)
+	}
+	if err := response.Validate(); err != nil {
+		t.Fatalf("expected complete default routing: %v", err)
+	}
+}
+
+func TestComplexityTierRoutingPutPersistsNormalizedConfig(t *testing.T) {
+	SetLogger(&mockLogger{})
+	store := setupPricingOverrideHandlerStore(t)
+	handler := &GovernanceHandler{configStore: store}
+	config := configstore.DefaultComplexityTierRoutingConfig()
+	config.Tiers[0].Models = []string{" openai/gpt-4.1-nano ", "anthropic/claude-haiku"}
+	config.Tiers[2].Enabled = false
+	body, err := json.Marshal(config)
+	if err != nil {
+		t.Fatalf("marshal routing config: %v", err)
+	}
+
+	ctx := newTestRequestCtx(string(body))
+	handler.updateComplexityTierRouting(ctx)
+
+	if ctx.Response.StatusCode() != fasthttp.StatusOK {
+		t.Fatalf("expected status 200, got %d: %s", ctx.Response.StatusCode(), string(ctx.Response.Body()))
+	}
+	stored, err := store.GetComplexityTierRoutingConfig(context.Background())
+	if err != nil {
+		t.Fatalf("get stored routing config: %v", err)
+	}
+	if stored == nil || stored.Tiers[0].Models[0] != "openai/gpt-4.1-nano" || stored.Tiers[2].Enabled {
+		t.Fatalf("expected normalized persisted routing config, got %+v", stored)
+	}
+}
+
+func TestComplexityTierRoutingRejectsInvalidPayloadAndResetPersistsDefaults(t *testing.T) {
+	SetLogger(&mockLogger{})
+	store := setupPricingOverrideHandlerStore(t)
+	handler := &GovernanceHandler{configStore: store}
+	valid := configstore.DefaultComplexityTierRoutingConfig()
+	validBody, err := json.Marshal(valid)
+	if err != nil {
+		t.Fatalf("marshal routing config: %v", err)
+	}
+
+	invalid := configstore.DefaultComplexityTierRoutingConfig()
+	invalid.Tiers[1].Tier = configstore.ComplexityTierSimple
+	invalidBody, err := json.Marshal(invalid)
+	if err != nil {
+		t.Fatalf("marshal invalid routing config: %v", err)
+	}
+	for _, body := range []string{
+		strings.TrimSuffix(string(validBody), "}") + `,"extra":true}`,
+		string(validBody) + `{}`,
+		string(invalidBody),
+	} {
+		ctx := newTestRequestCtx(body)
+		handler.updateComplexityTierRouting(ctx)
+		if ctx.Response.StatusCode() != fasthttp.StatusBadRequest {
+			t.Fatalf("expected status 400, got %d: %s", ctx.Response.StatusCode(), string(ctx.Response.Body()))
+		}
+	}
+
+	custom := configstore.DefaultComplexityTierRoutingConfig()
+	custom.Tiers[0].Enabled = false
+	if err := store.UpdateComplexityTierRoutingConfig(context.Background(), &custom); err != nil {
+		t.Fatalf("seed custom routing config: %v", err)
+	}
+	ctx := newTestRequestCtx("")
+	handler.resetComplexityTierRouting(ctx)
+	if ctx.Response.StatusCode() != fasthttp.StatusOK {
+		t.Fatalf("expected status 200, got %d: %s", ctx.Response.StatusCode(), string(ctx.Response.Body()))
+	}
+	stored, err := store.GetComplexityTierRoutingConfig(context.Background())
+	if err != nil {
+		t.Fatalf("get reset routing config: %v", err)
+	}
+	if stored == nil || !stored.Tiers[0].Enabled {
+		t.Fatalf("expected persisted defaults after reset, got %+v", stored)
+	}
+}
+
 func TestApplyVirtualKeyOwnershipUpdatePreservesOmittedAssociation(t *testing.T) {
 	teamID := "team-1"
 	customerID := "customer-1"

@@ -9,8 +9,10 @@ const (
 	ConfigProxyKey         = "proxy_config"
 	// ConfigComplexityAnalyzerConfigKey stores the persisted analyzer config JSON.
 	ConfigComplexityAnalyzerConfigKey = "complexity_analyzer_config"
-	ConfigRestartRequiredKey          = "restart_required"
-	ConfigHeaderFilterKey             = "header_filter_config"
+	// ConfigComplexityTierRoutingKey stores the persisted complexity-tier model groups JSON.
+	ConfigComplexityTierRoutingKey = "complexity_tier_routing"
+	ConfigRestartRequiredKey       = "restart_required"
+	ConfigHeaderFilterKey          = "header_filter_config"
 )
 
 // Keys for the ClientConfig.MetadataJSON blob.

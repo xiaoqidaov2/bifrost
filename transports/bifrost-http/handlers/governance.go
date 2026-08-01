@@ -1002,6 +1002,9 @@ func (h *GovernanceHandler) RegisterRoutes(r *router.Router, middlewares ...sche
 	r.GET("/api/governance/complexity-analyzer-config", lib.ChainMiddlewares(h.getComplexityAnalyzerConfig, middlewares...))
 	r.PUT("/api/governance/complexity-analyzer-config", lib.ChainMiddlewares(h.updateComplexityAnalyzerConfig, middlewares...))
 	r.POST("/api/governance/complexity-analyzer-config/reset", lib.ChainMiddlewares(h.resetComplexityAnalyzerConfig, middlewares...))
+	r.GET("/api/governance/complexity-tier-routing", lib.ChainMiddlewares(h.getComplexityTierRouting, middlewares...))
+	r.PUT("/api/governance/complexity-tier-routing", lib.ChainMiddlewares(h.updateComplexityTierRouting, middlewares...))
+	r.POST("/api/governance/complexity-tier-routing/reset", lib.ChainMiddlewares(h.resetComplexityTierRouting, middlewares...))
 
 	// Virtual Key CRUD operations
 	r.GET("/api/governance/virtual-keys", lib.ChainMiddlewares(h.getVirtualKeys, middlewares...))
@@ -1142,6 +1145,68 @@ func (h *GovernanceHandler) reloadComplexityAnalyzerConfig(ctx context.Context, 
 		return fmt.Errorf("governance manager does not support complexity analyzer config reload")
 	}
 	return reloader.ReloadComplexityAnalyzerConfig(ctx, config)
+}
+
+// getComplexityTierRouting handles GET /api/governance/complexity-tier-routing.
+// A missing persisted row is represented by the complete default configuration.
+func (h *GovernanceHandler) getComplexityTierRouting(ctx *fasthttp.RequestCtx) {
+	if h.configStore == nil {
+		SendError(ctx, fasthttp.StatusServiceUnavailable, "config store not available")
+		return
+	}
+	config, err := h.configStore.GetComplexityTierRoutingConfig(ctx)
+	if err != nil {
+		SendError(ctx, fasthttp.StatusInternalServerError, fmt.Sprintf("failed to get complexity tier routing: %v", err))
+		return
+	}
+	if config == nil {
+		SendJSON(ctx, configstore.DefaultComplexityTierRoutingConfig())
+		return
+	}
+	SendJSON(ctx, config)
+}
+
+// updateComplexityTierRouting handles PUT /api/governance/complexity-tier-routing.
+func (h *GovernanceHandler) updateComplexityTierRouting(ctx *fasthttp.RequestCtx) {
+	if h.configStore == nil {
+		SendError(ctx, fasthttp.StatusServiceUnavailable, "config store not available")
+		return
+	}
+	var payload configstore.ComplexityTierRoutingConfig
+	decoder := json.NewDecoder(bytes.NewReader(ctx.PostBody()))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&payload); err != nil {
+		SendError(ctx, fasthttp.StatusBadRequest, "Invalid request payload")
+		return
+	}
+	if err := decoder.Decode(&struct{}{}); err != io.EOF {
+		SendError(ctx, fasthttp.StatusBadRequest, "invalid request format: multiple JSON values")
+		return
+	}
+	normalized := payload.Normalized()
+	if err := normalized.Validate(); err != nil {
+		SendError(ctx, fasthttp.StatusBadRequest, err.Error())
+		return
+	}
+	if err := h.configStore.UpdateComplexityTierRoutingConfig(ctx, &normalized); err != nil {
+		SendError(ctx, fasthttp.StatusInternalServerError, fmt.Sprintf("failed to update complexity tier routing: %v", err))
+		return
+	}
+	SendJSON(ctx, normalized)
+}
+
+// resetComplexityTierRouting handles POST /api/governance/complexity-tier-routing/reset.
+func (h *GovernanceHandler) resetComplexityTierRouting(ctx *fasthttp.RequestCtx) {
+	if h.configStore == nil {
+		SendError(ctx, fasthttp.StatusServiceUnavailable, "config store not available")
+		return
+	}
+	defaults := configstore.DefaultComplexityTierRoutingConfig()
+	if err := h.configStore.UpdateComplexityTierRoutingConfig(ctx, &defaults); err != nil {
+		SendError(ctx, fasthttp.StatusInternalServerError, fmt.Sprintf("failed to reset complexity tier routing: %v", err))
+		return
+	}
+	SendJSON(ctx, defaults)
 }
 
 // Virtual Key CRUD Operations
