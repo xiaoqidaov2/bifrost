@@ -125,7 +125,7 @@ export function TierRouting() {
 									placeholder="选择模型…"
 									loadModelsOnEmptyProvider={true}
 									value={entry.models}
-									onValueChange={(models) => setModels(idx, models)}
+									onChange={(models: string[]) => setModels(idx, models)}
 									disabled={!entry.enabled}
 								/>
 							</div>
